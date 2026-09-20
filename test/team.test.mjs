@@ -188,6 +188,11 @@ test('team: damaged replica falls back, writer recovers, and unrefreshed leader 
     const c=f.leader.authority.snapshot().collaboration,oldSource=f.leader.authority.loadObject(f.leader.authority.record().object).source;
     const local=JSON.parse(oldSource);local.entities.find(e=>e.id==='parser').outputs=['unrefreshed local change'];fs.writeFileSync(f.leader.input,JSON.stringify(local));
     assert.throws(()=>f.leader.transact(oldSource,c,'test-race'),e=>e.code==='team/conflict');assert.deepEqual(readJSON(f.leader.input).entities.find(e=>e.id==='parser').outputs,['unrefreshed local change']);
+    f.leader.authority.refresh();
+    const commit=f.leader.authority.commit.bind(f.leader.authority);
+    f.leader.authority.commit=(...args)=>{const result=commit(...args);local.entities.find(e=>e.id==='parser').inputs=['concurrent editor write after commit'];fs.writeFileSync(f.leader.input,JSON.stringify(local));return result;};
+    assert.throws(()=>f.leader.grant({...f.alice,grants:[]}),e=>e.code==='team/recovery-conflict');
+    assert.deepEqual(readJSON(f.leader.input).entities.find(e=>e.id==='parser').inputs,['concurrent editor write after commit']);assert.ok(fs.existsSync(f.leader.pending));
   }finally{f.close();}
 });
 

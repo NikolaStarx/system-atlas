@@ -18,7 +18,9 @@ permissions, initialize-only restrictions, revocation, malformed fields, legacy
 HTTP bypasses, CLI forwarding to live preview, atomic batches, field versions,
 ABA conflicts, idempotency, two concurrent submitters, leader topology edits,
 invalid topology fallback, damaged replica recovery, network failure and a
-commit-before-source-mirror crash. Tests compare full Human/Agent graph records.
+commit-before-source-mirror crash. A concurrent editor write after durable commit
+was fault-injected and retained with a recovery conflict instead of being overwritten.
+Tests compare full Human/Agent graph records.
 
 The remote tampering test writes a forged snapshot and authorization entry into
 an actual Git branch, simulating the result of a merged unauthorized PR. Members

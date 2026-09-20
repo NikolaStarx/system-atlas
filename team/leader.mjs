@@ -54,6 +54,7 @@ export class TeamLeader {
     atomicWrite(this.pending,JSON.stringify({transactionId,beforeHash,source:loaded.bytes.toString()}));
     const record=this.authority.commit({...old,source:loaded.bytes.toString(),snapshot:built.snapshot,views:built.views,collaboration},reason,{transactionId,...extra});
     // The commit is the transaction boundary. Restart finishes a missing mirror write.
+    if(![beforeHash,loaded.revision].includes(sourceFingerprint(this.input)))problem('team/recovery-conflict','Local source changed after commit; preserve it before completing the pending mirror',{},409);
     atomicWrite(this.input,loaded.bytes);fs.unlinkSync(this.pending);return record;
   }
   grant(value){
