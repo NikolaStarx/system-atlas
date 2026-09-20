@@ -7,6 +7,7 @@ import { loadModel, modelSnapshot, compileView, digest, problem } from './model.
 import { resolveOutputPath } from '../renderers/shared/output-path.mjs';
 import { installAtlasInteractions } from './interactions.mjs';
 import { atlasExpansionLayout, atlasExpandedRoute } from './nested-layout.mjs';
+import { installAtlasTeam } from '../team/viewer.mjs';
 import { installAtlasNodes } from './node-explorer.mjs';
 import { assertProjectionCoverage, viewGraph, topologyHash } from './query.mjs';
 
@@ -21,7 +22,7 @@ export function explorerHTML(snapshot, views) {
   const themes = fs.readFileSync(new URL('./themes.css', import.meta.url), 'utf8');
   return template.replace('__ARCHIFY_SYSTEM_DATA__', () => safeJSON({ snapshot, views, themes, viewerVersion }))
     .replace('__SYSTEM_ATLAS_THEME_TOKENS__', () => tokens + themes)
-    .replace('__SYSTEM_ATLAS_INTERACTIONS__', () => [installAtlasInteractions, atlasExpansionLayout, atlasExpandedRoute, installAtlasNodes].map(fn=>fn.toString()).join('\n'));
+    .replace('__SYSTEM_ATLAS_INTERACTIONS__', () => [installAtlasInteractions, atlasExpansionLayout, atlasExpandedRoute, installAtlasNodes, installAtlasTeam].map(fn=>fn.toString()).join('\n'));
 }
 export function buildDesign(input, options = {}) {
   const loaded = options.loaded || loadModel(input);

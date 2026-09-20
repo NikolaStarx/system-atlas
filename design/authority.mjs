@@ -66,7 +66,7 @@ export class GraphAuthority {
     if(!Number.isInteger(n)||n<1||n>this.records.length)problem('authority/reset-required','Unknown cursor; obtain the manifest and read a fresh snapshot',{latestCursor:this.current.cursor},409);
     return this.records[n-1];
   }
-  snapshot(cursor){const r=this.record(cursor),o=this.loadObject(r.object);return {...o.snapshot,cursor:r.cursor,committedAt:r.at,topologyHash:r.topologyHash};}
+  snapshot(cursor){const r=this.record(cursor),o=this.loadObject(r.object);return {...o.snapshot,cursor:r.cursor,committedAt:r.at,topologyHash:r.topologyHash,...(o.collaboration?{collaboration:o.collaboration}:{})};}
   bundle(cursor){const r=this.record(cursor),o=this.loadObject(r.object);return {snapshot:this.snapshot(r.cursor),views:o.views};}
   html(){const b=this.bundle();return explorerHTML(b.snapshot,b.views);}
   status(){return {cursor:this.current?.cursor||0,revision:this.current?.revision||null,evidenceRevision:this.current?.evidenceRevision||null,sourceHash:sourceFingerprint(this.options.input),failure:this.storeFailure||this.failure,readOnly:!!this.storeFailure,observedAt:new Date().toISOString(),viewerVersion:version};}
@@ -79,7 +79,19 @@ export class GraphAuthority {
     return this.records.slice(n).map(r=>({cursor:r.cursor,revision:r.revision,evidenceRevision:r.evidenceRevision,at:r.at,reason:r.reason,topologyHash:r.topologyHash}));
   }
   commit(object,reason,extra={}){
-    this.writable();const bytes=Buffer.from(JSON.stringify(object)),hash=digest(bytes),file=path.join(this.directory,'objects',hash+'.json.gz');
+    this.writable();
+    const prior=this.current?this.loadObject(this.current.object):null;
+    if(object.collaboration||prior?.collaboration){
+      const collaboration=structuredClone(object.collaboration||prior.collaboration);
+      collaboration.fieldVersions||={};
+      const old=new Map((prior?.snapshot.model.entities||[]).map(e=>[e.id,e]));
+      for(const e of object.snapshot.model.entities)for(const field of ['label','purpose','inputs','outputs','steps','openIssues']){
+        const key=e.id+':'+field;
+        if(!Object.hasOwn(collaboration.fieldVersions,key)||JSON.stringify(old.get(e.id)?.[field])!==JSON.stringify(e[field]))collaboration.fieldVersions[key]=this.records.length+1;
+      }
+      object={...object,collaboration};
+    }
+    const bytes=Buffer.from(JSON.stringify(object)),hash=digest(bytes),file=path.join(this.directory,'objects',hash+'.json.gz');
     if(!fs.existsSync(file))atomicWrite(file,gzipSync(bytes));
     const record=sealed({cursor:this.records.length+1,previous:this.current?.checksum||'',input:this.options.input,object:hash,revision:object.snapshot.revision,evidenceRevision:object.snapshot.evidenceRevision,topologyHash:topologyHash(object.snapshot.model),at:new Date().toISOString(),reason,...extra});
     atomicWrite(path.join(this.directory,'commits',String(record.cursor).padStart(12,'0')+'.json'),JSON.stringify(record));

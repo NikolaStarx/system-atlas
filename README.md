@@ -84,10 +84,27 @@ do not exist. The viewer's **图数据** button exposes its matching Agent query
 Source/evidence checks run every second by default; publication events and browser
 reconciliation provide local live updates, not a hard real-time guarantee.
 
+## Team collaboration (0.4)
+
+A leader computer can own the authoritative graph while GitHub carries signed
+change requests and published snapshots. Members get explicit per-node and
+per-field grants. The leader checks identity, permissions and field versions;
+unrelated changes can proceed, while conflicting or unauthorized requests receive
+rejections. Remote edits to a published graph never overwrite the leader's local
+state. Both participants have local Human and Agent interfaces with sync status,
+request receipts and recovery.
+
+Start with **[the collaboration setup and protocol](references/collaboration.md)**.
+Private state and keys must live outside Git worktrees. The protocol uses no
+custom public server; `team serve` must run for ongoing synchronization. This is
+an initial small-team implementation, not a replacement for repository access
+controls, real-time presence or a high-volume message service.
+
 ## Boundaries
 
 - No automatic codebase-to-architecture discovery or background agent dispatch.
-- Browser requests are a manual CLI handoff; saving a request does not wake an agent.
+- Single-user design requests are a manual CLI handoff. Team requests are processed
+  by the leader permission engine; neither mode wakes an agent.
 - Version time is not execution time. Runtime temporal/causal queries are not implemented.
 - A cyclic graph region does not prove a completed business feedback loop.
 - File hashes bind evidence to bytes, not to semantic correctness or user acceptance.
@@ -101,6 +118,7 @@ reconciliation provide local live updates, not a hard real-time guarantee.
 | Purpose | Entry |
 |---|---|
 | Core philosophy and future product questions | [PHILOSOPHY.zh-CN.md](PHILOSOPHY.zh-CN.md) |
+| Leader authority, permissions, signed requests and recovery | [Collaboration protocol](references/collaboration.md), [team/](team/), [team tests](test/team.test.mjs) |
 | Agent-facing skill instructions | [SKILL.md](SKILL.md) |
 | Model, evidence and requests | [Model contract](references/system-design-contract.md), [schema](schemas/system.schema.json) |
 | Queries, pagination, synchronization and recovery | [Agent interface](references/agent-interface.md) |
@@ -110,6 +128,9 @@ reconciliation provide local live updates, not a hard real-time guarantee.
 | HTTP and CLI | [design/server.mjs](design/server.mjs), [design/cli.mjs](design/cli.mjs) |
 | Human projection and viewer | [design/deliver.mjs](design/deliver.mjs), [design/viewer.html](design/viewer.html) |
 | Interface and recovery integration tests | [test/agent-interface.test.mjs](test/agent-interface.test.mjs) |
+
+[0.4.0 verification record](references/verification-0.4.0.md) lists the automated
+and actual browser checks and their limits.
 
 `npm test` selects the maintained System Atlas regression suite. Other inherited
 Archify tests remain as upstream development material; some expect upstream

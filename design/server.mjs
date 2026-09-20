@@ -7,12 +7,12 @@ import { mutateRequest, readRequests } from './requests.mjs';
 import { GraphAuthority, atomicWrite } from './authority.mjs';
 
 export async function startDesignPreview(options) {
-  const authority=new GraphAuthority(options);authority.acquire();
+  const authority=options.team?.authority||new GraphAuthority(options);if(!authority.writer)authority.acquire();
   try{authority.refresh({forceEvidence:true});if(!authority.current)problem('authority/unavailable','No valid source or durable snapshot is available',authority.status(),503);}catch(e){authority.close();throw e;}
   const token=randomBytes(32).toString('hex'),openCodexFile=options.openCodexFile||null,subscribers=new Set();
   const requestOptions={...options,getLoaded:()=>parseModel(authority.loadObject(authority.record().object).source)};
   let port,timer,heartbeat,stopping=false;
-  function requestState(){try{return {requests:readRequests(requestOptions),requestError:null};}catch(e){return {requests:[],requestError:{code:e.code,message:e.message}};}}
+  function requestState(){if(options.team)return {requests:[],requestError:null};try{return {requests:readRequests(requestOptions),requestError:null};}catch(e){return {requests:[],requestError:{code:e.code,message:e.message}};}}
   function status(){const s=authority.status(),r=requestState();return {...s,revisionKey:digest(JSON.stringify([s.cursor,s.failure,r])),requestError:r.requestError};}
   function state(){authority.refresh({forceEvidence:true});return {...authority.snapshot(),...requestState(),...authority.status(),generation:authority.current.cursor,adapter:'manual-cli',revisionKey:status().revisionKey};}
   function notify(){for(const sub of subscribers){try{for(const event of authority.events(sub.cursor)){if(!sub.res.write(`id: ${event.cursor}\nevent: revision\ndata: ${JSON.stringify(event)}\n\n`)){sub.res.destroy();break;}sub.cursor=event.cursor;}}catch{sub.res.destroy();}}}
@@ -25,7 +25,8 @@ export async function startDesignPreview(options) {
       const source=req.headers.origin;if(source&&source!==`http://127.0.0.1:${port}`)return send(403,{error:'Same-origin requests only'});
       if(req.method==='GET'){
         if(url.pathname==='/')return send(200,authority.html(),'text/html; charset=utf-8');
-        if(url.pathname==='/api/session')return send(200,{token,adapter:'manual-cli',codexFiles:!!openCodexFile,input:path.resolve(options.input)});
+        if(url.pathname==='/api/session')return send(200,{token,adapter:'manual-cli',codexFiles:!!openCodexFile,input:path.resolve(options.input),teamRole:options.team?.config.role||null});
+        if(url.pathname==='/api/team'&&options.team)return send(200,options.team.teamState());
         if(url.pathname==='/api/status')return send(200,status());
         if(url.pathname==='/api/state')return send(200,q.cursor?{...authority.snapshot(q.cursor),...requestState(),authority:authority.status()}:state());
         if(url.pathname==='/api/request-state')return send(200,{...requestState(),authority:authority.status()});
@@ -56,6 +57,14 @@ export async function startDesignPreview(options) {
       let body='';for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>100000)problem('request/size','Request too large',{},413);}
       let data;try{data=JSON.parse(body);}catch{problem('request/json','Malformed JSON');}
       if(!data||typeof data!=='object'||Array.isArray(data))problem('request/json','Expected a JSON object');
+      if(url.pathname==='/api/team/sync'&&options.team)return send(200,await options.team.sync());
+      if(url.pathname==='/api/team/request'&&options.team){
+        if(options.team.config.role!=='member')problem('team/role','Member request endpoint only',{},403);
+        if(Object.keys(data).some(k=>!['changes','context','requestId'].includes(k)))problem('team/shape','Unknown request field');
+        return send(200,{ok:true,request:options.team.prepare(data.changes,data.context,data.requestId).payload});
+      }
+      if(url.pathname==='/api/team/grant'&&options.team){if(options.team.config.role!=='leader')problem('team/forbidden','Only the local leader manages permissions',{},403);return send(200,{ok:true,cursor:options.team.grant(data).cursor});}
+      if(options.team&&['/api/requests','/api/agent-request'].includes(url.pathname))problem('team/forbidden','Use signed team change requests in collaboration mode',{},403);
       if(url.pathname==='/api/rollback'){const result=authority.rollback(data);notify();return send(200,result);}
       if(url.pathname==='/api/refresh'){authority.refresh({forceEvidence:true});notify();return send(200,status());}
       if(url.pathname==='/api/requests'){

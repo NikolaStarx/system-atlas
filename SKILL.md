@@ -3,7 +3,7 @@ name: system-atlas
 description: Design and explore systems through nested architecture views, source-backed module details, and separate design, implementation, test and runtime status. Use for system design, architecture exploration, interface explanation and scoped design changes. Provides interactive HTML with trackpad navigation, docked or floating details, Archify visual styles and Frutiger Aero. Does not supervise a production workflow.
 license: MIT
 metadata:
-  version: "0.3.0"
+  version: "0.4.0"
   based_on: "Archify 2.16 (MIT); independent user-level fork"
 ---
 
@@ -94,6 +94,22 @@ save records a local request; it does not automatically dispatch or wake Codex.
 A consuming Agent does the authorized implementation and real checks, then binds
 receipts to the exact changed files. A request's result must not silently upgrade
 whole-module maturity. Keep this boundary explicit in the UI.
+
+## Team collaboration
+
+When several people or sessions share a design, read
+[the collaboration protocol](references/collaboration.md). Use `team` commands;
+keep the leader's private authority outside every Git worktree. Remote snapshots
+are signed publication caches, never input to the leader. Members send small
+signed node/field operations; the leader enforces local grants, field versions,
+atomic validation and idempotent receipts. Do not replace this with repeated
+`git pull` into the authority or accept actor names as authentication.
+
+Use the same accepted cursor for Human and Agent views. Preserve pending requests
+and drafts without presenting them as accepted changes. On conflict, reread the
+specific field and reconsider the intent before resubmitting; do not silently
+rebase. Member/session labels describe assignment, not exclusive ownership or
+live presence. This does not add worker dispatch or production supervision.
 
 ## Individual diagrams
 

@@ -1,6 +1,6 @@
 {
   "name": "system-atlas",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "System design and layered architecture explorer, based on Archify 2.16.",
@@ -16,9 +16,10 @@
     "check:brand-marks": "node scripts/generate-brand-marks.mjs --check",
     "generate:validators": "node scripts/generate-validators.mjs",
     "check:validators": "node scripts/generate-validators.mjs --check",
-    "test": "node --test test/system-design.test.mjs test/v1-compatibility.test.mjs test/preview.test.mjs test/output-path.test.mjs test/delivery-contract.test.mjs test/nested-layout.test.mjs test/agent-interface.test.mjs",
+    "test": "node --test test/system-design.test.mjs test/v1-compatibility.test.mjs test/preview.test.mjs test/output-path.test.mjs test/delivery-contract.test.mjs test/nested-layout.test.mjs test/agent-interface.test.mjs test/team.test.mjs",
     "render:examples": "node scripts/render-examples.mjs examples",
-    "test:system": "node --test test/system-design.test.mjs test/agent-interface.test.mjs"
+    "test:system": "node --test test/system-design.test.mjs test/agent-interface.test.mjs test/team.test.mjs",
+    "test:team": "node --test test/team.test.mjs"
   },
   "devDependencies": {
     "ajv": "^8.17.1",
