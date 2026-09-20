@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "skillId": "system-atlas",
+  "version": "0.3.0",
+  "source": {
+    "repository": "https://github.com/NikolaStarx/system-atlas"
+  },
+  "updatePolicy": "manual-git",
+  "upstream": {
+    "name": "Archify",
+    "version": "2.16.0",
+    "repository": "https://github.com/tt-a1i/archify",
+    "license": "MIT"
+  }
+}
