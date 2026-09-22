@@ -4,6 +4,8 @@ import { generateKeyPairSync, createPublicKey, sign, verify } from 'node:crypto'
 import { problem, digest } from '../design/model.mjs';
 import { atomicWrite } from '../design/authority.mjs';
 
+import { taskFields } from '../design/tasks.mjs';
+
 export const fields=['label','purpose','inputs','outputs','steps','openIssues'];
 export const id=value=>typeof value==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$/.test(value);
 export const canonical=value=>JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.keys(item).sort().map(key=>[key,item[key]])):item);
@@ -33,7 +35,7 @@ export function initializeIdentity(directory,actor){
   return {actor,publicKey:keys.publicKey};
 }
 export function validateGrant(grant){
-  exact(grant,['actor','publicKey','grants','agentId','sessionId']);
+  exact(grant,['actor','publicKey','grants','agentId','sessionId','taskGrants']);
   if(!id(grant.actor))problem('team/policy','Invalid actor');publicKey(grant.publicKey);
   if(!Array.isArray(grant.grants)||grant.grants.length>100)problem('team/policy','Expected bounded grants');
   for(const rule of grant.grants){
@@ -41,6 +43,14 @@ export function validateGrant(grant){
     if(!Array.isArray(rule.nodes)||!rule.nodes.length||rule.nodes.some(n=>!id(n)))problem('team/policy','Grant explicit node IDs');
     if(!Array.isArray(rule.fields)||rule.fields.some(f=>!fields.includes(f)))problem('team/policy','Unknown editable field');
     for(const key of ['comments','onlyIfEmpty'])if(rule[key]!==undefined&&typeof rule[key]!=='boolean')problem('team/policy','Expected boolean permission');
+  }
+  if(grant.taskGrants!==undefined){
+    if(!Array.isArray(grant.taskGrants)||grant.taskGrants.length>100)problem('team/policy','Expected bounded task grants');
+    for(const rule of grant.taskGrants){
+      exact(rule,['tasks','fields']);
+      if(!Array.isArray(rule.tasks)||!rule.tasks.length||rule.tasks.length>2000||rule.tasks.some(t=>!id(t)))problem('team/policy','Grant explicit task IDs');
+      if(!Array.isArray(rule.fields)||rule.fields.some(f=>!taskFields.includes(f)))problem('team/policy','Unknown editable task field');
+    }
   }
   for(const key of ['agentId','sessionId'])if(grant[key]!==undefined&&(typeof grant[key]!=='string'||grant[key].length>200))problem('team/policy','Invalid assignment context');
   return grant;
@@ -53,6 +63,11 @@ export function validateRequest(request){
   for(const value of Object.values(request.context||{}))if(typeof value!=='string'||value.length>200)problem('team/request','Invalid session context');
   const seen=new Set();
   for(const change of request.changes){
+    if(change.operation==='task.set'){
+      exact(change,['operation','taskId','field','expectedVersion','value']);
+      if(!id(change.taskId)||!taskFields.includes(change.field)||!Number.isInteger(change.expectedVersion)||change.expectedVersion<1)problem('team/operation','Task edits require declared fields and versions');
+      const key='task:'+change.taskId+':'+change.field;if(seen.has(key))problem('team/request','Duplicate task field');seen.add(key);continue;
+    }
     exact(change,change.operation==='comment.add'?['operation','nodeId','text']:['operation','nodeId','field','expectedVersion','value']);
     if(!id(change.nodeId))problem('team/request','Invalid node ID');
     if(change.operation==='field.set'){

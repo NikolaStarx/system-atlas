@@ -76,6 +76,9 @@ the development dependencies installed by `npm ci`.
 - Separate node selection, details, compact inline submaps and full-view entry.
   Trackpad zoom/pan, docked or floating details, theme and density controls.
 - Classic, Signal Flow, Blueprint, Editorial and Frutiger Aero appearance.
+- A task board over independent work items, optional many-to-many module links,
+  scoped delete/restore, and signed member field grants. English/Chinese interface
+  labels are independent of authored graph and task text.
 
 Topology equivalence is defined at the **same version and scope**, including
 expanded submaps. A filtered or folded view does not assert that omitted edges
@@ -129,8 +132,9 @@ controls, real-time presence or a high-volume message service.
 | Human projection and viewer | [design/deliver.mjs](design/deliver.mjs), [design/viewer.html](design/viewer.html) |
 | Interface and recovery integration tests | [test/agent-interface.test.mjs](test/agent-interface.test.mjs) |
 
-[0.4.0 verification record](references/verification-0.4.0.md) lists the automated
-and actual browser checks and their limits.
+[0.5.0 verification record](references/verification-0.5.0.md) lists task-board,
+Agent comprehension and browser checks, fixes and their limits. The earlier
+[0.4.0 record](references/verification-0.4.0.md) covers the collaboration baseline.
 
 `npm test` selects the maintained System Atlas regression suite. Other inherited
 Archify tests remain as upstream development material; some expect upstream
@@ -152,3 +156,10 @@ private project data is required.
 Brand marks retain their [source and rights notes](brand-marks/README.md).
 Update this fork through its Git repository. Inherited Archify update scripts are
 upstream tooling, not a supported System Atlas updater.
+
+## Task board
+
+Canvas and a Trello-style task board share one accepted model. Add optional tasks,
+filter by member, inspect/edit cards, drag between four states, and locate linked
+modules in Canvas. [Task model, Agent commands and team grants](references/task-board.md).
+Task completion does not promote module verification.

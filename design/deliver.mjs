@@ -5,6 +5,11 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { loadModel, modelSnapshot, compileView, digest, problem } from './model.mjs';
 import { resolveOutputPath } from '../renderers/shared/output-path.mjs';
+import { installAtlasBoard } from './board.mjs';
+import { projectTasks } from './tasks.mjs';
+import { mountAtlasCanvas } from './canvas-host.mjs';
+import { atlasUIText, installAtlasChrome, installAtlasFrameUI } from './reader-ui.mjs';
+import { viewerCatalog } from '../renderers/shared/i18n.mjs';
 import { installAtlasInteractions } from './interactions.mjs';
 import { atlasExpansionLayout, atlasExpandedRoute } from './nested-layout.mjs';
 import { installAtlasTeam } from '../team/viewer.mjs';
@@ -20,9 +25,14 @@ export function explorerHTML(snapshot, views) {
   const tokens = renderer.slice(renderer.indexOf('    :root,'), renderer.indexOf('    * { margin: 0;'));
   if (!tokens.includes('--frontend-fill')) problem('system/themes', 'Bundled renderer theme tokens unavailable');
   const themes = fs.readFileSync(new URL('./themes.css', import.meta.url), 'utf8');
-  return template.replace('__ARCHIFY_SYSTEM_DATA__', () => safeJSON({ snapshot, views, themes, viewerVersion }))
-    .replace('__SYSTEM_ATLAS_THEME_TOKENS__', () => tokens + themes)
-    .replace('__SYSTEM_ATLAS_INTERACTIONS__', () => [installAtlasInteractions, atlasExpansionLayout, atlasExpandedRoute, installAtlasNodes, installAtlasTeam].map(fn=>fn.toString()).join('\n'));
+  const viewportCSS = fs.readFileSync(new URL('./viewport.css', import.meta.url), 'utf8');
+  const chromeCSS=fs.readFileSync(new URL('./chrome.css',import.meta.url),'utf8');
+  const boardCSS=fs.readFileSync(new URL('./board.css',import.meta.url),'utf8');
+  const uiMessages=JSON.parse(fs.readFileSync(new URL('./ui.en.json',import.meta.url),'utf8'));
+  const rendererCatalogs={en:viewerCatalog('en'),'zh-CN':viewerCatalog('zh-CN')};
+  return template.replace('__ARCHIFY_SYSTEM_DATA__', () => safeJSON({ snapshot, views, themes, viewportCSS, chromeCSS, uiMessages, rendererCatalogs, viewerVersion }))
+    .replace('__SYSTEM_ATLAS_THEME_TOKENS__', () => tokens + themes + chromeCSS + boardCSS)
+    .replace('__SYSTEM_ATLAS_INTERACTIONS__', () => [mountAtlasCanvas, atlasUIText, installAtlasChrome, installAtlasFrameUI, installAtlasInteractions, atlasExpansionLayout, atlasExpandedRoute, installAtlasNodes, installAtlasTeam, projectTasks, installAtlasBoard].map(fn=>fn.toString()).join('\n'));
 }
 export function buildDesign(input, options = {}) {
   const loaded = options.loaded || loadModel(input);

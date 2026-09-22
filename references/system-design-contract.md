@@ -137,8 +137,9 @@ an unrelated passing test cannot establish a module's verification. A `partial`
 claim can cover only the stated subset. A `passed` claim still means only its
 listed checks and scope, never user acceptance or all conceivable behavior.
 
-The first explorer UI is Simplified Chinese; authored text and the existing
-embedded diagram viewer retain the model's locale. It is not a full English UI.
+The explorer UI supports English and Simplified Chinese, with English as the
+default. Settings change interface labels only; authored graph, module and task
+text retains its original language.
 
 ## Manual Agent adapter
 

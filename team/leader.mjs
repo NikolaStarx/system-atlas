@@ -3,7 +3,6 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { GraphAuthority, atomicWrite, sourceFingerprint } from '../design/authority.mjs';
 import { parseModel, problem } from '../design/model.mjs';
-import { buildDesign } from '../design/deliver.mjs';
 import { canonical, hash, id, initializeIdentity, readJSON, signed, verified, validateGrant, validateRequest } from './protocol.mjs';
 import { GitTransport } from './transport.mjs';
 
@@ -49,7 +48,7 @@ export class TeamLeader {
     const loaded=parseModel(source),beforeHash=sourceFingerprint(this.input),transactionId=randomUUID();
     const old=this.authority.loadObject(this.authority.record().object);
     if(beforeHash!==old.snapshot.revision)problem('team/conflict','Leader source changed before this transaction; refresh before retrying',{},409);
-    const built=loaded.revision===old.snapshot.revision?old:buildDesign(this.input,{loaded,repoRoot:this.config.repoRoot});
+    const built=loaded.revision===old.snapshot.revision?old:this.authority.prepare(loaded.bytes);
     if(beforeHash!==sourceFingerprint(this.input))problem('team/conflict','Leader source changed while preparing transaction',{},409);
     atomicWrite(this.pending,JSON.stringify({transactionId,beforeHash,source:loaded.bytes.toString()}));
     const record=this.authority.commit({...old,source:loaded.bytes.toString(),snapshot:built.snapshot,views:built.views,collaboration},reason,{transactionId,...extra});
@@ -61,6 +60,7 @@ export class TeamLeader {
     validateGrant(value);this.authority.refresh();
     const snapshot=this.authority.snapshot(),c=structuredClone(snapshot.collaboration);
     for(const g of value.grants)for(const node of g.nodes)if(!snapshot.model.entities.some(e=>e.id===node))problem('team/policy','Grant refers to unknown node',{node});
+    for(const g of value.taskGrants||[])for(const taskId of g.tasks)if(!snapshot.model.tasks?.some(t=>t.id===taskId))problem('team/policy','Grant refers to unknown task',{taskId});
     c.members=c.members.filter(m=>m.actor!==value.actor);c.members.push(value);c.members.sort((a,b)=>a.actor.localeCompare(b.actor));
     return this.transact(this.authority.loadObject(this.authority.record().object).source,c,'team-policy');
   }
@@ -78,6 +78,12 @@ export class TeamLeader {
     try{
       if(request.baseCursor>snapshot.cursor)problem('team/conflict','Request refers to an unknown future version',{},409);
       for(const [index,change] of request.changes.entries()){
+        if(change.operation==='task.set'){
+          const task=candidate.tasks?.find(t=>t.id===change.taskId);if(!task)problem('team/task-missing','Task no longer exists',{},409);
+          if(!member.taskGrants?.some(g=>g.tasks.includes(change.taskId)&&g.fields.includes(change.field)))problem('team/forbidden','Task field permission not granted',{},403);
+          if(c.fieldVersions['task:'+change.taskId+':'+change.field]!==change.expectedVersion)problem('team/conflict','Task field changed; reread before resubmitting',{},409);
+          task[change.field]=change.value;continue;
+        }
         const node=candidate.entities.find(e=>e.id===change.nodeId);if(!node)problem('team/node-missing','Target node no longer exists',{},409);
         const allowed=member.grants.filter(g=>g.nodes.includes(change.nodeId));
         if(change.operation==='comment.add'){
@@ -92,9 +98,9 @@ export class TeamLeader {
       }
       parseModel(JSON.stringify(candidate));
       // Includes graph projection/layout validation before anything is committed.
-      if(hash(candidate)!==hash(loaded.model))buildDesign(this.input,{loaded:parseModel(JSON.stringify(candidate)),repoRoot:this.config.repoRoot});
+      if(hash(candidate)!==hash(loaded.model))this.authority.prepare(JSON.stringify(candidate));
     }catch(error){status='rejected';code=error.code||'team/validation';message=error.message;c.comments=snapshot.collaboration.comments;}
-    const receipt={requestId:request.requestId,actor:request.actor,payloadHash,status,code,message,changes:request.changes.map(({nodeId,operation,field})=>({nodeId,operation,...(field?{field}:{})})),context:request.context||{},cursor:snapshot.cursor+1,at:new Date().toISOString()};
+    const receipt={requestId:request.requestId,actor:request.actor,payloadHash,status,code,message,changes:request.changes.map(({nodeId,taskId,operation,field})=>({...(taskId?{taskId}:{nodeId}),operation,...(field?{field}:{})})),context:request.context||{},cursor:snapshot.cursor+1,at:new Date().toISOString()};
     c.receipts.push(receipt);
     this.transact(status==='accepted'?JSON.stringify(candidate):loaded.bytes,c,'team-request',{teamRequest:request.actor+'/'+request.requestId});
     return receipt;

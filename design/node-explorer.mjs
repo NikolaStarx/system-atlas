@@ -1,4 +1,4 @@
-// Runs inside the diagram frame; the host owns identity, navigation and state.
+// Runs in the scoped canvas; the reader owns identity, navigation and state.
 export function installAtlasNodes(win, options) {
   const doc=win.document,svg=doc.querySelector('.diagram-container > svg');
   if(!svg)return;
@@ -7,6 +7,9 @@ export function installAtlasNodes(win, options) {
   const childView=id=>options.model.views.find(v=>v.scope===id);
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const expanded=new Set(options.expanded||[]);
+  const en=options.locale==='en';
+  const inspectLabel=label=>en?'Details: '+label:'查看 '+label+' 详情';
+  const submapLabel=(label,open)=>en?(open?'Collapse ':'Expand ')+label+' submap; double-click to enter full view':(open?'收起 ':'展开 ')+label+' 子图；双击进入完整视图';
   let density=options.density||'detailed',selected=options.selected,plan,pending=null;
   const pathString=points=>points.map((p,i)=>(i?'L':'M')+p.join(' ')).join(' ');
   const make=(tag,attrs={},parent)=>{const el=doc.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))el.setAttribute(k,v);if(parent)parent.append(el);return el;};
@@ -64,15 +67,15 @@ export function installAtlasNodes(win, options) {
     group.dataset.atlasExpanded=String(!!nested);
     make('title',{},group).textContent=[n.label,n.sublabel,n.tag].filter(Boolean).join(' · ');
     make('rect',{...{x:b.x,y:b.y,width:b.w,height:b.h},rx:10,class:'c-mask'},group);
-    make('rect',{x:b.x,y:b.y,width:b.w,height:b.h,rx:10,class:'c-'+n.kind+' atlas-card-surface','stroke-width':1.3,role:'button',tabindex:0,'aria-label':'选择 '+n.label,'data-atlas-action':'select','data-atlas-entity':n.id,'data-atlas-key':key},group);
+    make('rect',{x:b.x,y:b.y,width:b.w,height:b.h,rx:10,class:'c-'+n.kind+' atlas-card-surface','stroke-width':1.3,role:'button',tabindex:0,'aria-label':(en?'Select ':'选择 ')+n.label,'data-atlas-action':'select','data-atlas-entity':n.id,'data-atlas-key':key},group);
     make('rect',{x:b.x+1,y:b.y+1,width:b.w-2,height:Math.min(42,b.h-2),rx:9,fill:'url(#atlas-card-gloss)','pointer-events':'none'},group);
     const content=make('g',{'pointer-events':'none'},group);
     if(nested){
       textLines(content,n.label,b.x+16,b.y+27,b.w-220,17);
-      make('text',{x:b.x+16,y:b.y+48,class:'atlas-caption','font-size':10},content).textContent='子一级 · '+nested.data.nodes.length+' 个模块';
-      button(group,{x:b.x+b.w-200,y:b.y+13,w:91,action:'submap',id:n.id,key,label:'收起 '+n.label+' 子图；双击进入完整视图',caption:'收起子图',glyph:'collapse',pressed:true});
-      button(group,{x:b.x+b.w-103,y:b.y+13,w:58,action:'enter',id:n.id,key,label:'进入 '+n.label+' 完整子图',caption:'进入',glyph:'enter'});
-      button(group,{x:b.x+b.w-39,y:b.y+13,action:'inspect',id:n.id,key,label:'查看 '+n.label+' 详情'});
+      make('text',{x:b.x+16,y:b.y+48,class:'atlas-caption','font-size':10},content).textContent=en?'Next level · '+nested.data.nodes.length+' modules':'子一级 · '+nested.data.nodes.length+' 个模块';
+      button(group,{x:b.x+b.w-200,y:b.y+13,w:91,action:'submap',id:n.id,key,label:submapLabel(n.label,true),caption:en?'Collapse':'收起子图',glyph:'collapse',pressed:true});
+      button(group,{x:b.x+b.w-103,y:b.y+13,w:58,action:'enter',id:n.id,key,label:en?'Enter full submap: '+n.label:'进入 '+n.label+' 完整子图',caption:en?'Open':'进入',glyph:'enter'});
+      button(group,{x:b.x+b.w-39,y:b.y+13,action:'inspect',id:n.id,key,label:inspectLabel(n.label)});
       make('path',{d:`M${b.x+14} ${b.y+62}H${b.x+b.w-14}`,class:'atlas-divider'},group);
       const inner=make('g',{transform:`translate(${b.x+20} ${b.y+78})`,class:'atlas-submap','data-atlas-submap':key},group);
       drawMini(inner,nested);
@@ -80,16 +83,16 @@ export function installAtlasNodes(win, options) {
       const labelY=b.y+(mini?23:29),font=mini?15:16;
       textLines(content,n.label,b.x+12,labelY,b.w-(mini?24:52),font,2);
       if(!mini){
-        button(group,{x:b.x+b.w-37,y:b.y+8,action:'inspect',id:n.id,key,label:'查看 '+n.label+' 详情'});
+        button(group,{x:b.x+b.w-37,y:b.y+8,action:'inspect',id:n.id,key,label:inspectLabel(n.label)});
         const description=make('g',{class:'atlas-detail-copy'},content);
         make('text',{x:b.x+12,y:b.y+65,'font-size':10,class:'atlas-caption'},description).textContent=n.sublabel.length>25?n.sublabel.slice(0,24)+'…':n.sublabel;
         if(n.tag)make('text',{x:b.x+12,y:b.y+81,'font-size':8.5,class:'atlas-caption'},description).textContent=n.tag.length>22?n.tag.slice(0,21)+'…':n.tag;
         const claim=entities.get(n.id)?.maturity?.implementation;
         make('text',{x:b.x+12,y:b.y+b.h-16,'font-size':9,class:'atlas-caption'},description).textContent=options.labels[claim?.effective||claim?.value]||'待复核';
-      }else button(group,{x:b.x+b.w-36,y:b.y+b.h-33,action:'inspect',id:n.id,key,label:'查看 '+n.label+' 详情'});
+      }else button(group,{x:b.x+b.w-36,y:b.y+b.h-33,action:'inspect',id:n.id,key,label:inspectLabel(n.label)});
       if(child){
         const w=mini?70:83;
-        button(group,{x:mini?b.x+5:b.x+b.w-w-9,y:b.y+b.h-35,w,action:'submap',id:n.id,key,label:'展开 '+n.label+' 子图；双击进入完整视图',caption:'子图 '+child.placements.length,glyph:'sub',pressed:false});
+        button(group,{x:mini?b.x+5:b.x+b.w-w-9,y:b.y+b.h-35,w,action:'submap',id:n.id,key,label:submapLabel(n.label,false),caption:(en?'Map ':'子图 ')+child.placements.length,glyph:'sub',pressed:false});
       }
     }
   }
@@ -143,6 +146,7 @@ export function installAtlasNodes(win, options) {
   function cancelPending(){if(pending){win.clearTimeout(pending.timer);pending=null;}}
   function toggle(key){cancelPending();expanded.has(key)?expanded.delete(key):expanded.add(key);redraw();svg.querySelector('[data-atlas-action="submap"][data-atlas-key="'+CSS.escape(key)+'"]')?.focus({preventScroll:true});}
   function handle(event){
+    if(win.atlasAnnotationActive?.()||doc.querySelector('style[data-browser-comment-cursor-style]'))return;
     const action=event.target.closest('[data-atlas-action]'),node=event.target.closest('[data-atlas-node]');
     if(!action&&!node)return;
     if(event.type==='keydown'&&!['Enter',' ','Escape'].includes(event.key))return;

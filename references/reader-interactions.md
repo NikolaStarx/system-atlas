@@ -55,3 +55,47 @@ semantic checks remain the authority for diagram delivery.
 Legacy `.archify-design` journal paths, `archify-design` browser draft keys and
 `X-Archify-Token` remain protocol compatibility details, not a dependency on the
 original installed Archify Skill. New reader preferences use `system-atlas-reader`.
+
+## Reader chrome and localization
+
+The settings gear opens a nonmodal, theme-aware popover anchored to the header.
+Style, light/dark appearance and interface language live together; outside click
+and Escape dismiss it. Frequent canvas commands use consistent icons with native
+tooltips, accessible names and pressed/expanded states. Language is a reader
+preference (`system-atlas-reader.locale`), separate from `model.meta.locale`.
+English is the initial UI language; Chinese remains selectable. Authored node
+labels, descriptions, notes, paths and evidence are never translated by the UI
+catalog. Renderer chrome reuses the bundled English/Chinese messages.
+
+The canvas fills the available reading area. A single grid extends across its
+whole surface and follows the existing camera; the authored SVG viewBox and
+canonical exported grid are unchanged. Narrow viewports overlay the inspector
+instead of reducing the canvas to a fixed fraction of the screen height.
+
+The explorer mounts each accepted renderer scene in an open Shadow DOM on the
+same page. It does not create or navigate iframes. This keeps browser annotation
+hit-testing and the pointer in one document while isolating styles, IDs and the
+renderer camera. A scoped runtime owns listeners, timers, animation frames and
+observers, and explicitly disposes them when switching views. A new scene is
+initialized before replacing the last usable scene; initialization errors keep
+the previous canvas visible.
+
+When Codex's annotation cursor style is present, Atlas yields node and gesture
+input to the host. Browser-host annotations remain separate from Atlas design
+requests; verify them in the actual host rather than inferring success from
+renderer tests or CSS cursor values.
+
+Focus canvas fills the browser viewport edge to edge, hiding the project header,
+view navigation and bottom module strip. Only Exit focus, Details and Settings
+float at top right; existing diagram tools remain on the canvas. Presentation
+and export move to top left to avoid overlap. Details overlay the map, and exiting
+focus restores the previous inspector arrangement without changing the graph,
+selection, drafts or camera. Escape closes an open overlay before leaving focus.
+
+## Board alongside Canvas
+
+A centered segmented switch uses an independent equal-track header layout. Its
+geometry must not move when canvas-only tools disappear. See [task board](task-board.md)
+for card hit regions, theme colors, keyboard status editing, draft recovery and
+module navigation. Dragging captures the starting accepted version; refresh may
+not silently rebase a drop onto another user's update.

@@ -15,13 +15,15 @@ export async function runDesign(args) {
   system-atlas deliver <system.json> <output.html> [--repo-root path] [--json]
   system-atlas preview <system.json> [--repo-root path] [--state-dir path] [--port n] [--open]
   system-atlas manifest <system.json> [--url http://127.0.0.1:PORT]
-  system-atlas query <system.json> --mode overview|local|reach|path|cycles|view|full
+  system-atlas query <system.json> --mode overview|local|reach|path|cycles|view|board|full
       [--target id] [--from id --to id] [--view id] [--expanded parser,parser/asr] [--depth n] [--hops n]
+      [--assignee id] [--status todo|doing|review|done] [--search text]
       [--direction in|out|both] [--kinds dataflow,call] [--detail summary|full]
       [--cursor n] [--limit n] [--max-bytes n] [--page token] [--offline]
   system-atlas diff <system.json> --after n [--cursor n] [--page token]
   system-atlas history <system.json> | status <system.json>
   system-atlas watch <system.json> [--after n]    # NDJSON, Ctrl-C stops
+  system-atlas task <system.json> --payload task-change.json
   system-atlas rollback <system.json> --payload rollback.json
   system-atlas inspect <system.json> [--offline]  # explicit full snapshot
   system-atlas requests <system.json> [--repo-root path] [--state-dir path]
@@ -41,7 +43,7 @@ See references/system-design-contract.md for payloads and evidence contracts.`;
       const key = rest[i];
       if (key === '--json' || key === '--no-open') continue;
       if (key === '--offline') { options.offline = true; continue; }
-      if (['--mode','--target','--from','--to','--view','--expanded','--depth','--hops','--direction','--kinds','--detail','--cursor','--limit','--max-bytes','--page','--after','--url'].includes(key)) {
+      if (['--mode','--target','--from','--to','--view','--expanded','--depth','--hops','--direction','--kinds','--detail','--cursor','--limit','--max-bytes','--page','--after','--url','--assignee','--status','--search'].includes(key)) {
         const value=rest[++i]; if(!value||value.startsWith('--'))problem('design/usage', `${key} needs a value`);
         if(key==='--url')options.url=value;else query[key==='--max-bytes'?'maxBytes':key.slice(2)]=value;continue;
       }
@@ -58,10 +60,10 @@ See references/system-design-contract.md for payloads and evidence contracts.`;
     else if (command === 'deliver') console.log(JSON.stringify(deliverDesign(options.input, positional[0], options).receipt, null, 2));
     else if (['manifest','query','inspect','diff','history','status'].includes(command)) console.log(JSON.stringify(await readAuthority(options, command, query), null, 2));
     else if(command==='watch') await watchAuthority(options,query.after);
-    else if(command==='rollback'){
+    else if(['rollback','task'].includes(command)){
       if(!options.payload)problem('design/usage','--payload is required');
       const connection=await connectAuthority({...options,requireLive:true});
-      console.log(JSON.stringify(await requestAuthority(connection,'/api/rollback',{payload:JSON.parse(fs.readFileSync(options.payload,'utf8'))}),null,2));
+      console.log(JSON.stringify(await requestAuthority(connection,command==='task'?'/api/tasks':'/api/rollback',{payload:JSON.parse(fs.readFileSync(options.payload,'utf8'))}),null,2));
     }
     else if (command === 'requests') console.log(JSON.stringify(discoverAuthority(options) ? await readAuthority(options,'requests') : { adapter: 'manual-cli', journal: journalPath(options.input, options.stateDir), requests: readRequests(options) }, null, 2));
     else if (['submit','receive','report','rebase'].includes(command)) {

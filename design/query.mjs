@@ -1,9 +1,10 @@
 import { digest, problem } from './model.mjs';
+import { projectTasks } from './tasks.mjs';
 
-export const strategies = ['overview', 'local', 'reach', 'path', 'cycles', 'view', 'full'];
+export const strategies = ['overview', 'local', 'reach', 'path', 'cycles', 'view', 'board', 'full'];
 const sorted = xs => [...xs].sort((a,b) => String(a.id).localeCompare(String(b.id), 'en'));
 export function topology(model) {
-  return { entities: sorted(model.entities).map(e => ({id:e.id, parent:e.parent || null})), relations: sorted(model.relations).map(({id,from,to,kind}) => ({id,from,to,kind})) };
+  return { entities: sorted(model.entities).map(e => ({id:e.id, parent:e.parent || null})), ...(model.tasks?.length ? { tasks: sorted(model.tasks).map(t => ({id:t.id, entities:[...t.entities].sort()})) } : {}), relations: sorted(model.relations).map(({id,from,to,kind}) => ({id,from,to,kind})) };
 }
 export const topologyHash = model => digest(JSON.stringify(topology(model)));
 export function viewGraph(model, id) {
@@ -24,9 +25,9 @@ export function assertProjectionCoverage(model) {
 export function manifest(snapshot) {
   const m=snapshot.model;
   return {schema_version:1, cursor:snapshot.cursor, revision:snapshot.revision, evidenceRevision:snapshot.evidenceRevision, topologyHash:topologyHash(m), title:m.meta.title,
-    counts:Object.fromEntries(['entities','relations','views','evidence'].map(k=>[k,m[k].length])),
+    counts:Object.fromEntries(['entities','relations','views','evidence','tasks'].map(k=>[k,(m[k]||[]).length])),
     views:m.views.map(v=>({id:v.id,title:v.title,scope:v.scope||null,entities:v.placements.length,relations:v.relations.length})),
-    capabilities:{strategies, diff:true, resumableEvents:true, pinnedVersions:true, runtimeTemporalQueries:false},
+    capabilities:{strategies, diff:true, resumableEvents:true, pinnedVersions:true, runtimeTemporalQueries:false, taskBoard:true},
     defaults:{mode:'overview',detail:'summary',limit:100,maxBytes:65536},
     semantics:{direction:'Stored from → to; dependency impact depends on the authored edge convention.',time:'Cursor is an accepted model/evidence revision, not a runtime event clock.',crossLevel:'Containment never implies dataflow; missing boundary links remain unknown.'}};
 }
@@ -36,15 +37,17 @@ function int(value, fallback, max, name) {
   return n;
 }
 export function normalizeQuery(q={}) {
-  const allowed=['mode','target','from','to','view','expanded','depth','hops','direction','kinds','detail','limit','maxBytes','page','cursor'];
+  const allowed=['mode','target','from','to','view','expanded','depth','hops','direction','kinds','detail','limit','maxBytes','page','cursor','assignee','status','search'];
   for(const k of Object.keys(q)) if(!allowed.includes(k)) problem('query/argument','Unknown query option',{key:k});
   const mode=q.mode||'overview', detail=q.detail||'summary', direction=q.direction||'out';
   if(!strategies.includes(mode)||!['summary','full'].includes(detail)||!['in','out','both'].includes(direction)) problem('query/argument','Invalid mode, detail or direction');
   const kinds=q.kinds===undefined?['call','dataflow','dependency','feedback']:(Array.isArray(q.kinds)?q.kinds:String(q.kinds).split(','));
   if(!kinds.length||kinds.some(k=>!['call','dataflow','dependency','feedback'].includes(k))) problem('query/argument','Invalid relation kinds');
   const query={mode,detail,direction,kinds:[...new Set(kinds)].sort(),depth:int(q.depth,0,1000,'depth'),hops:int(q.hops,1,1000,'hops'),limit:Math.max(1,int(q.limit,100,10000,'limit')),maxBytes:Math.max(1024,int(q.maxBytes,65536,16*1024*1024,'maxBytes'))};
-  for(const k of ['target','from','to','view']) if(q[k]!==undefined){if(typeof q[k]!=='string')problem('query/argument',`${k} must be a string`);query[k]=q[k];}
+  for(const k of ['target','from','to','view','assignee','status','search']) if(q[k]!==undefined){if(typeof q[k]!=='string')problem('query/argument',`${k} must be a string`);query[k]=q[k];}
   if(q.expanded!==undefined){const keys=Array.isArray(q.expanded)?q.expanded:String(q.expanded).split(',').filter(Boolean);if(mode!=='view'||keys.some(k=>typeof k!=='string'||k.length>8000))problem('query/argument','expanded requires view mode and valid instance paths');query.expanded=[...new Set(keys)].sort();}
+  if(query.status && !['todo','doing','review','done'].includes(query.status)) problem('query/argument','Invalid task status');
+  if(mode!=='board' && ['assignee','status','search'].some(k=>q[k]!==undefined)) problem('query/argument','Task filters require board mode');
   return query;
 }
 // Pages are pinned to both a snapshot and a normalized query, never live offsets.
@@ -63,6 +66,10 @@ export function paginate(records, identity, options={}) {
 }
 export function queryGraph(snapshot, input={}) {
   const q=normalizeQuery(input), m=snapshot.model, byId=new Map(m.entities.map(e=>[e.id,e]));
+  if(q.mode==='board'){
+    const projection=projectTasks(m,q), records=projection.tasks.map(task=>({type:'task',value:q.detail==='full'?task:{id:task.id,title:task.title,status:task.status,assignees:task.assignees,entities:task.entities,blocked:task.blocked}}));
+    return {schema_version:1,cursor:snapshot.cursor,revision:snapshot.revision,evidenceRevision:snapshot.evidenceRevision,query:q,selectionComplete:true,columns:projection.columns.map(c=>({status:c.status,count:c.taskIds.length})),notes:['Task entities are explicit module associations, not dataflow. Completion does not promote module maturity.'],...paginate(records,{cursor:snapshot.cursor,revision:snapshot.revision,query:q},{...q,page:input.page})};
+  }
   const edges=sorted(m.relations.filter(e=>q.kinds.includes(e.kind))), children=new Map();
   for(const e of m.entities){const p=e.parent||null;if(!children.has(p))children.set(p,[]);children.get(p).push(e.id);}
   const requireNode=id=>{if(!byId.has(id))problem('query/entity','Unknown or missing entity',{id},404);};
@@ -114,13 +121,14 @@ export function queryGraph(snapshot, input={}) {
   const entities=sorted(customNodes||m.entities.filter(e=>ids.has(e.id))).map(node);
   const evidenceIds=new Set(q.detail==='full'?entities.flatMap(e=>e.evidence||[]):[]);
   const records=[...entities.map(value=>({type:'entity',value})),...sorted(selectedEdges).map(value=>({type:'relation',value})),...sorted(boundary).map(value=>({type:'boundary',value})),...sorted(groups).map(value=>({type:'group',value})),...sorted(m.evidence.filter(e=>evidenceIds.has(e.id))).map(value=>({type:'evidence',value}))];
+  if(q.mode==='full') records.push(...projectTasks(m).tasks.map(value=>({type:'task',value})));
   const result=paginate(records,{cursor:snapshot.cursor,revision:snapshot.revision,evidenceRevision:snapshot.evidenceRevision,query:q}, {...q,page:input.page});
   return {schema_version:1,cursor:snapshot.cursor,revision:snapshot.revision,evidenceRevision:snapshot.evidenceRevision,query:q,selectionComplete:true,notes,...(path?{path}:{}),...result};
 }
 export function diffSnapshots(before,after,options={}) {
   const changes=[];
-  for(const collection of ['entities','relations','views','evidence']){
-    const a=new Map(before.model[collection].map(x=>[x.id,x])),b=new Map(after.model[collection].map(x=>[x.id,x]));
+  for(const collection of ['entities','relations','views','evidence','tasks']){
+    const a=new Map((before.model[collection]||[]).map(x=>[x.id,x])),b=new Map((after.model[collection]||[]).map(x=>[x.id,x]));
     for(const id of [...new Set([...a.keys(),...b.keys()])].sort()){
       if(!a.has(id))changes.push({collection,id,operation:'added',after:b.get(id)});
       else if(!b.has(id))changes.push({collection,id,operation:'removed',before:a.get(id)});

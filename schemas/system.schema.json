@@ -45,6 +45,9 @@
         },
         "rootView": {
           "$ref": "#/$defs/id"
+        },
+        "demo": {
+          "type": "boolean"
         }
       }
     },
@@ -610,6 +613,13 @@
         }
       },
       "maxItems": 5000
+    },
+    "tasks": {
+      "type": "array",
+      "maxItems": 2000,
+      "items": {
+        "$ref": "#/$defs/task"
+      }
     }
   },
   "$defs": {
@@ -634,6 +644,85 @@
         "sha256": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "status",
+        "assignees",
+        "entities",
+        "description",
+        "acceptance",
+        "deliverables",
+        "blocked"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "status": {
+          "enum": [
+            "todo",
+            "doing",
+            "review",
+            "done"
+          ]
+        },
+        "assignees": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "entities": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 8000
+        },
+        "acceptance": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "deliverables": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "blocked": {
+          "type": "string",
+          "maxLength": 2000
         }
       }
     }

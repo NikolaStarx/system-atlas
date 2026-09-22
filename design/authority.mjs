@@ -6,6 +6,7 @@ import { parseModel, modelSnapshot, digest, problem } from './model.mjs';
 import { buildDesign, explorerHTML } from './deliver.mjs';
 import { journalPath } from './requests.mjs';
 import { manifest, queryGraph, diffSnapshots, paginate, topologyHash } from './query.mjs';
+import { taskFields } from './tasks.mjs';
 
 const version=JSON.parse(fs.readFileSync(new URL('../package.json',import.meta.url),'utf8')).version;
 export const authorityDirectory=options=>path.join(path.dirname(journalPath(options.input,options.stateDir)),'authority');
@@ -23,6 +24,13 @@ export class GraphAuthority {
     this.options={...options,input:path.resolve(options.input)};this.directory=authorityDirectory(this.options);this.coordinationDirectory=authorityDirectory({...this.options,stateDir:undefined});this.records=[];this.current=null;this.failure=null;this.storeFailure=null;this.cache=new Map();this.writer=false;this.lockToken=randomUUID();this.lastEvidenceCheck=0;
     fs.mkdirSync(path.join(this.directory,'commits'),{recursive:true});fs.mkdirSync(path.join(this.directory,'objects'),{recursive:true});
     for(const dir of new Set([this.directory,this.coordinationDirectory])){fs.mkdirSync(dir,{recursive:true});if(!fs.existsSync(path.join(dir,'.gitignore')))atomicWrite(path.join(dir,'.gitignore'),'*\n');}
+    const contextFile=path.join(this.directory,'context.json');
+    if(fs.existsSync(contextFile)){
+      let context;try{context=JSON.parse(fs.readFileSync(contextFile,'utf8'));}catch{problem('authority/context','Unreadable local evidence context; preserve it and repair before reopening');}
+      if(context.version!==1||context.input!==this.options.input||!(context.repoRoot===null||typeof context.repoRoot==='string'&&path.isAbsolute(context.repoRoot)))problem('authority/context','Invalid local evidence context');
+      if(this.options.repoRoot===undefined)this.options.repoRoot=context.repoRoot;
+    }
+    if(this.options.repoRoot)this.options.repoRoot=path.resolve(this.options.repoRoot);
     this.readHistory();
   }
   readHistory(){
@@ -49,7 +57,9 @@ export class GraphAuthority {
   acquire(){
     const file=path.join(this.coordinationDirectory,'writer.lock');
     for(let attempt=0;attempt<2;attempt++){
-      try{const fd=fs.openSync(file,'wx',0o600);try{fs.writeFileSync(fd,JSON.stringify({pid:process.pid,token:this.lockToken}));fs.fsyncSync(fd);}finally{fs.closeSync(fd);}this.writer=true;return;}
+      try{const fd=fs.openSync(file,'wx',0o600);try{fs.writeFileSync(fd,JSON.stringify({pid:process.pid,token:this.lockToken}));fs.fsyncSync(fd);}finally{fs.closeSync(fd);}this.writer=true;
+        try{atomicWrite(path.join(this.directory,'context.json'),JSON.stringify({version:1,input:this.options.input,repoRoot:this.options.repoRoot||null}));}catch(error){this.close();throw error;}
+        return;}
       catch(error){if(error.code!=='EEXIST')throw error;let owner;try{owner=JSON.parse(fs.readFileSync(file,'utf8'));}catch{problem('authority/locked','Unreadable writer lock; preserve and inspect it',{},409);}
         let alive=true;try{process.kill(owner.pid,0);}catch(e){if(e.code==='ESRCH')alive=false;}
         if(alive)problem('authority/locked','Another preview owns this graph. Use its Agent endpoint.',{pid:owner.pid},409);
@@ -89,6 +99,11 @@ export class GraphAuthority {
         const key=e.id+':'+field;
         if(!Object.hasOwn(collaboration.fieldVersions,key)||JSON.stringify(old.get(e.id)?.[field])!==JSON.stringify(e[field]))collaboration.fieldVersions[key]=this.records.length+1;
       }
+      const oldTasks=new Map((prior?.snapshot.model.tasks||[]).map(t=>[t.id,t]));
+      for(const task of object.snapshot.model.tasks||[])for(const field of taskFields){
+        const key='task:'+task.id+':'+field;
+        if(!Object.hasOwn(collaboration.fieldVersions,key)||JSON.stringify(oldTasks.get(task.id)?.[field])!==JSON.stringify(task[field]))collaboration.fieldVersions[key]=this.records.length+1;
+      }
       object={...object,collaboration};
     }
     const bytes=Buffer.from(JSON.stringify(object)),hash=digest(bytes),file=path.join(this.directory,'objects',hash+'.json.gz');
@@ -97,13 +112,42 @@ export class GraphAuthority {
     atomicWrite(path.join(this.directory,'commits',String(record.cursor).padStart(12,'0')+'.json'),JSON.stringify(record));
     this.records.push(record);this.current=record;this.cacheObject(hash,object);this.failure=null;return record;
   }
+  prepare(source){
+    const loaded=parseModel(source),old=this.current?this.loadObject(this.current.object):null;
+    const architecture=model=>JSON.stringify({...model,tasks:undefined});
+    // Validated task-only changes do not alter canvas geometry or require five
+    // renderer subprocesses for every card move. Re-evaluate evidence normally.
+    if(old&&old.viewerVersion===version&&architecture(loaded.model)===architecture(parseModel(old.source).model))return {snapshot:modelSnapshot(loaded,this.options.repoRoot),views:old.views};
+    return buildDesign(this.options.input,{...this.options,loaded});
+  }
+  recoverTransaction(){
+    const file=path.join(this.directory,'pending-source.json');if(!fs.existsSync(file))return;
+    const pending=JSON.parse(fs.readFileSync(file,'utf8'));
+    if(this.records.some(r=>r.transactionId===pending.transactionId)){
+      if(![pending.beforeHash,parseModel(pending.source).revision].includes(sourceFingerprint(this.options.input)))problem('authority/recovery-conflict','An unrelated source edit blocks recovery. Preserve it before completing the pending mirror.',{},409);
+      atomicWrite(this.options.input,pending.source);
+    }
+    fs.unlinkSync(file);
+  }
+  transact(source,reason,extra={}){
+    this.writable();this.recoverTransaction();
+    const old=this.loadObject(this.record().object),beforeHash=sourceFingerprint(this.options.input);
+    if(beforeHash!==old.snapshot.revision)problem('authority/conflict','Working source changed; refresh before retrying',{},409);
+    const built=this.prepare(source),transactionId=randomUUID(),file=path.join(this.directory,'pending-source.json');
+    if(beforeHash!==sourceFingerprint(this.options.input))problem('authority/conflict','Source changed during preparation',{},409);
+    atomicWrite(file,JSON.stringify({transactionId,beforeHash,source}));
+    const record=this.commit({...old,source,snapshot:built.snapshot,views:built.views,viewerVersion:version},reason,{transactionId,...extra});
+    // Durable commit precedes the editable source mirror; restart finishes it.
+    if(![beforeHash,built.snapshot.revision].includes(sourceFingerprint(this.options.input)))problem('authority/recovery-conflict','Source changed after commit; preserve it before recovery',{},409);
+    atomicWrite(this.options.input,source);fs.unlinkSync(file);return record;
+  }
   refresh({forceEvidence=false}={}){
     if(this.storeFailure)return false;
     const before=this.current?.cursor;
     try{
-      this.writable();const bytes=fs.readFileSync(this.options.input),hash=digest(bytes),old=this.current?this.loadObject(this.current.object):null;
+      this.writable();this.recoverTransaction();const bytes=fs.readFileSync(this.options.input),hash=digest(bytes),old=this.current?this.loadObject(this.current.object):null;
       if(!old||hash!==old.snapshot.revision||old.viewerVersion!==version){
-        const loaded=parseModel(bytes);const built=buildDesign(this.options.input,{...this.options,loaded});
+        const built=this.prepare(bytes);
         if(sourceFingerprint(this.options.input)!==hash)problem('authority/superseded','Source changed during validation; keeping the accepted graph');
         this.commit({source:bytes.toString('utf8'),snapshot:built.snapshot,views:built.views,viewerVersion:version},old?'source-update':'initial');this.lastEvidenceCheck=Date.now();
       }else if(forceEvidence||Date.now()-this.lastEvidenceCheck>1000){

@@ -1,9 +1,9 @@
 ---
 name: system-atlas
-description: Design and explore systems through nested architecture views, source-backed module details, and separate design, implementation, test and runtime status. Use for system design, architecture exploration, interface explanation and scoped design changes. Provides interactive HTML with trackpad navigation, docked or floating details, Archify visual styles and Frutiger Aero. Does not supervise a production workflow.
+description: Design and explore systems through nested architecture views, source-backed module details, and separate design, implementation, test and runtime status. Use for system design, architecture exploration, task boards, interface explanation and scoped changes. Provides interactive HTML with trackpad navigation, docked or floating details, Archify visual styles and Frutiger Aero. Does not supervise a production workflow.
 license: MIT
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
   based_on: "Archify 2.16 (MIT); independent user-level fork"
 ---
 
@@ -67,17 +67,36 @@ to expand a compact child map in place; double-click it to enter the full view.
 Keep submap badges in both density modes and provide explicit entry and keyboard
 alternatives. Selection and both detail modes use the same entity and draft. Refresh must preserve focus, selection, drafts and camera position.
 
+The settings gear groups style, appearance, interface language and help. Use
+icon controls with tooltips and accessible names for common commands. UI language
+is independent of authored graph text: English initially, with Chinese available
+in settings. Do not translate project content when switching reader language.
+
 Keep Archify's Classic, Signal Flow, Blueprint and Editorial styles. The explorer
 reuses their bundled tokens and keeps canvas and chrome synchronized. Frutiger
 Aero is an additional style adapted from the user's Music Agent theme; its dark
 mode is the initial reader preference, with all styles switchable. Do not flatten
 a requested visual style into a generic dashboard. Respect reduced motion.
 
+## Task board
+
+For lightweight project coordination, read [task board](references/task-board.md).
+Tasks are independent work items in `tasks`; modules are system objects in the
+top-level `entities` collection. A task's `entities` field contains zero or more
+module IDs, not copies or new nodes. An empty list is a valid authoritative task.
+Use the shared Board projection; do not turn module maturity into task progress.
+Creating/deleting a task never creates/deletes its linked modules. For task work,
+read the reference's Agent decision rules before choosing a mutation.
+Canvas and Board use the same accepted cursor, recovery and team authority.
+Start Agent task reads with `query --mode board`, filtered by member or module;
+use `task --payload` for local/leader edits and signed `task.set` for members.
+This adds planning and progress, without dispatch, leases or production gates.
+
 ## Agent handoff
 
 For graph reading, use [the Agent interface](references/agent-interface.md).
 Start with `manifest`, then choose a bounded `query`: overview, local module and
-neighbors, reachability, shortest path, cyclic region, or the exact Human view.
+neighbors, reachability, shortest path, cyclic region, the exact Human view, or the filtered task board.
 Use full snapshots deliberately. Pin the returned cursor across pages and use
 `diff`/`watch` for subsequent changes. Do not repeatedly dump a large source JSON
 or invent a new traversal script for an already supported reading strategy.

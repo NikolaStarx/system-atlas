@@ -6,6 +6,13 @@ facts. All commands below resolve from this Skill directory.
 
 ## Start small
 
+The authority remembers an explicitly configured `--repo-root` in private local
+metadata, so restarting without that flag keeps the same evidence base. An
+explicit new root replaces it; file hashes are still rechecked on that root.
+This machine-specific context is not part of graph snapshots or team publication.
+Older stores without saved context still need the flag on their first restart;
+missing evidence is never guessed or promoted to verified.
+
 Start the authority once, or connect to the already running preview:
 
 ```bash
@@ -37,7 +44,8 @@ remain authoring/export operations; an exported HTML is an offline snapshot.
 | A connection between two entities | `--mode path --from input --to session` | One deterministic shortest-hop witness, not all possible routes. No path yields an empty `path`. |
 | Mutually reachable/cyclic regions | `--mode cycles [--target parser]` | Cyclic strongly connected components, including explicit self-loops. No enumeration of exponentially many cycles. |
 | Exactly a Human view | `--mode view --view overview` | The same canonical entity/relation IDs used to compile that view; `--expanded parser,parser/asr` includes reached inline submaps. |
-| Explicit comprehensive audit | `--mode full --detail full` | All entities, relations and referenced evidence, paginated. `inspect` is an explicit unpaginated full snapshot escape hatch. |
+| Tasks for a member or module | `--mode board --assignee A --detail full` or `--mode board --target parser` | Independent task records and their explicit module links, including tasks without links. No implicit traversal of task associations as dataflow. |
+| Explicit comprehensive audit | `--mode full --detail full` | All entities, relations, tasks and referenced evidence, paginated. `inspect` is an explicit unpaginated full snapshot escape hatch. |
 
 Use `--kinds dataflow,call,feedback` to select relation semantics. The default
 includes all four existing kinds. `direction` follows stored `from → to`; a
@@ -45,10 +53,12 @@ dependency's authored orientation must be understood before calling the result
 an impact analysis. Containment is never silently traversed as a flow edge.
 Do not infer missing cross-level boundary mappings.
 
-`--detail summary` returns identity, label, type, parent and expansion entry.
-`--detail full` adds the entity's complete responsibility, IO, steps, issues,
+For entity queries, `--detail summary` returns identity, label, type, parent and
+expansion entry. `--detail full` adds the entity's responsibility, IO, steps, issues,
 maturity and bound evidence. Fetch source contents separately through registered
 evidence IDs. Graph queries do not copy whole source files into context.
+Board summary returns task ID, title, status, assignees, module IDs and blocker;
+full detail additionally includes description, acceptance and deliverables.
 
 These are structural queries. Version cursors describe model/evidence history,
 not event time or runtime causality. Time-respecting execution queries are not
@@ -60,7 +70,7 @@ failure or of execution permission.
 
 Responses carry `schema_version`, `cursor`, `revision`, `evidenceRevision`, the
 normalized `query`, `selectionComplete`, `complete`, `page` and typed `records`.
-Record types are entity, relation, boundary, group and evidence. Boundary records
+Record types are entity, relation, boundary, group, evidence and task. Boundary records
 retain the external entity ID. Endpoint IDs can refer to records on another
 page; do not interpret a page as a self-contained complete graph.
 
@@ -86,10 +96,9 @@ node bin/system-atlas.mjs history /path/to/system.json
 ```
 
 `diff` reports stable-ID additions, removals, and before/after updates to entities,
-relations, views, evidence and metadata. It supports the same pagination budget;
+relations, views, evidence, tasks and metadata. It supports the same pagination budget;
 pin its returned `toCursor` on subsequent pages. Reordering source JSON alone can
-create a source revision without a semantic graph difference. The current schema
-has no other mutable top-level domain collections.
+create a source revision without a semantic graph difference.
 
 `history` is also paginated. Pin its returned `cursor` across pages so new
 publications do not move the history window during a read.
@@ -114,6 +123,8 @@ Every canonical entity and relation must be available in at least one authored
 view or publication fails. A filtered view intentionally contains a subset;
 topological equality means SAME cursor and SAME query, not that every screen
 shows every node at once. Layout, camera and density do not change graph facts.
+Tasks need no authored Canvas placement: their IDs and optional module links are
+available through Board and Agent task queries at the same accepted cursor.
 
 The browser's 图数据 action reads the same `mode=view` API as an Agent. On update,
 it fetches a cursor-pinned complete bundle before switching model and child-view
@@ -167,3 +178,10 @@ of the stored files or a verified backup, not destructive automatic repair.
 
 Browser mutations require the existing loopback same-origin token. No arbitrary
 shell command or path-based file opener is introduced.
+
+## Task projection
+
+`query --mode board` reads task records, with `--assignee`, `--status`, `--search`
+and `--target` filters. Full reads and diffs include tasks. Human Board uses the
+same selector and accepted version. See [task board](task-board.md) for fields,
+local/leader writes, member field grants and conflict recovery.

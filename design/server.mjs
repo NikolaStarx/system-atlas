@@ -4,9 +4,11 @@ import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { parseModel, digest, resolveBoundFile, problem } from './model.mjs';
 import { mutateRequest, readRequests } from './requests.mjs';
+import { changeTask } from './tasks.mjs';
 import { GraphAuthority, atomicWrite } from './authority.mjs';
 
 export async function startDesignPreview(options) {
+  if(options.team?.authority&&path.resolve(options.input)!==path.resolve(options.team.authority.options.input))problem('authority/identity','Preview input must be the team authority model, not its original import',{},409);
   const authority=options.team?.authority||new GraphAuthority(options);if(!authority.writer)authority.acquire();
   try{authority.refresh({forceEvidence:true});if(!authority.current)problem('authority/unavailable','No valid source or durable snapshot is available',authority.status(),503);}catch(e){authority.close();throw e;}
   const token=randomBytes(32).toString('hex'),openCodexFile=options.openCodexFile||null,subscribers=new Set();
@@ -65,6 +67,11 @@ export async function startDesignPreview(options) {
       }
       if(url.pathname==='/api/team/grant'&&options.team){if(options.team.config.role!=='leader')problem('team/forbidden','Only the local leader manages permissions',{},403);return send(200,{ok:true,cursor:options.team.grant(data).cursor});}
       if(options.team&&['/api/requests','/api/agent-request'].includes(url.pathname))problem('team/forbidden','Use signed team change requests in collaboration mode',{},403);
+      if(url.pathname==='/api/tasks'){
+        if(options.team?.config.role==='member')problem('team/forbidden','Members submit signed task.set requests with granted field versions',{},403);
+        const result=changeTask(authority,data,(source,reason,extra)=>options.team?options.team.transact(source,authority.snapshot().collaboration,reason,extra):authority.transact(source,reason,extra));
+        notify();return send(200,result);
+      }
       if(url.pathname==='/api/rollback'){const result=authority.rollback(data);notify();return send(200,result);}
       if(url.pathname==='/api/refresh'){authority.refresh({forceEvidence:true});notify();return send(200,status());}
       if(url.pathname==='/api/requests'){

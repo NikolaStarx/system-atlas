@@ -17,7 +17,8 @@ const help=`System Atlas team · leader computer is authoritative
   team sync --state DIR                            # one bounded synchronization
   team serve --state DIR [--port 0] [--interval 10] # local viewer and ongoing sync
   team state --state DIR
-  team query --state DIR --mode overview|local|view|full [--target ID] [--view ID] [--cursor N] [--page TOKEN]
+  team query --state DIR --mode overview|local|view|full|board [--target ID] [--view ID] [--cursor N] [--page TOKEN]
+  team query --state DIR --mode board [--assignee NAME] [--status todo|doing|review|done] [--search TEXT]
   team manifest --state DIR
 
 Private state MUST stay outside Git worktrees. Never git pull into leader state.
@@ -30,7 +31,7 @@ export async function runTeam(args){
     for(let i=0;i<rest.length;i++){
       const key=rest[i],value=rest[++i];if(!key.startsWith('--')||value===undefined||value.startsWith('--'))problem('team/usage',help);
       if(['--state','--model','--repo-root','--project','--remote','--actor','--branch','--invite','--payload','--port','--interval'].includes(key))options[key.slice(2)]=value;
-      else if(['--mode','--target','--from','--to','--view','--expanded','--depth','--hops','--direction','--kinds','--detail','--cursor','--limit','--max-bytes','--page'].includes(key))query[key==='--max-bytes'?'maxBytes':key.slice(2)]=value;
+      else if(['--mode','--target','--from','--to','--view','--expanded','--depth','--hops','--direction','--kinds','--detail','--cursor','--limit','--max-bytes','--page','--assignee','--status','--search'].includes(key))query[key==='--max-bytes'?'maxBytes':key.slice(2)]=value;
       else problem('team/usage','Unknown option '+key);
     }
     if(!options.state)problem('team/usage','--state is required');const directory=path.resolve(options.state);let result;

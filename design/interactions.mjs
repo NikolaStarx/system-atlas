@@ -6,6 +6,15 @@ export function installAtlasInteractions(win) {
   const svg = panel?.querySelector(':scope > svg');
   const camera = win.Archify?.view;
   if (!svg || !camera) return;
+  // One continuous grid follows the existing camera, including letterboxed space.
+  const grid = () => {
+    const matrix=svg.getScreenCTM(),bounds=panel.getBoundingClientRect();if(!matrix)return;
+    panel.style.setProperty('--atlas-grid-size',`${40*matrix.a}px ${40*matrix.d}px`);
+    panel.style.setProperty('--atlas-grid-position',`${matrix.e-bounds.left}px ${matrix.f-bounds.top}px`);
+  };
+  const gridObserver=new win.MutationObserver(grid);gridObserver.observe(svg,{attributes:true,attributeFilter:['viewBox','style']});
+  const gridResize=new win.ResizeObserver(grid);gridResize.observe(panel);win.requestAnimationFrame(grid);
+  win.addEventListener('pagehide',()=>{gridObserver.disconnect();gridResize.disconnect();},{once:true});
   const controls = '.diagram-nav, .focus-chip, .node-finder, .diagram-guide, .overview-map, .route-probe, .semantic-lens, input, textarea, select, [contenteditable]';
   let timer, gestureScale = null;
   const finish = () => { panel.classList.remove('atlas-gesturing'); };
@@ -40,6 +49,7 @@ export function installAtlasInteractions(win) {
     camera.centerAt(x, y, { scale: next, instant: true });
   };
   const wheel = event => {
+    if(win.atlasAnnotationActive?.()||doc.querySelector('style[data-browser-comment-cursor-style]'))return;
     if (event.target.closest?.(controls)) return;
     const before = camera.state(), center = centerPoint();
     const matrix = svg.getScreenCTM();
@@ -57,6 +67,7 @@ export function installAtlasInteractions(win) {
     }
   };
   const gestureStart = event => {
+    if(win.atlasAnnotationActive?.()||doc.querySelector('style[data-browser-comment-cursor-style]'))return;
     if (event.target.closest?.(controls)) return;
     event.preventDefault();
     gestureScale = camera.state().scale;

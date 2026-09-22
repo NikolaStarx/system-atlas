@@ -50,9 +50,9 @@ export function validateModel(model) {
   if (issues.length) return issues;
   const err = (code, subject, message) => issues.push({ code: `system/${code}`, subject, message });
   const maps = {};
-  for (const key of ['entities', 'relations', 'views', 'evidence']) {
+  for (const key of ['entities', 'relations', 'views', 'evidence', 'tasks']) {
     maps[key] = new Map();
-    for (const item of model[key]) {
+    for (const item of model[key] || []) {
       if (maps[key].has(item.id)) err('duplicate-id', item.id, `Duplicate ${key} identity`);
       maps[key].set(item.id, item);
     }
@@ -117,6 +117,7 @@ export function validateModel(model) {
       }
     }
   }
+  for (const task of model.tasks || []) for (const id of task.entities) if (!entities.has(id)) err('task-target', task.id, `Unknown module ${id}`);
   for (const relation of model.relations) if (!entities.has(relation.from) || !entities.has(relation.to)) err('relation-endpoint', relation.id, 'Unknown endpoint');
   for (const ev of model.evidence) {
     if (ev.end_line && ev.end_line < (ev.line || 1)) err('source-range', ev.id, 'End line precedes start');
