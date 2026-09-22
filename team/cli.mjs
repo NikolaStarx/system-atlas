@@ -18,7 +18,7 @@ const help=`System Atlas team · leader computer is authoritative
   team serve --state DIR [--port 0] [--interval 10] # local viewer and ongoing sync
   team state --state DIR
   team query --state DIR --mode overview|local|view|full|board [--target ID] [--view ID] [--cursor N] [--page TOKEN]
-  team query --state DIR --mode board [--assignee NAME] [--status todo|doing|review|done] [--search TEXT]
+  team query --state DIR --mode board [--assignee NAME] [--status todo|doing|review|done] [--search TEXT] [--filter all|active|blocked|review|unassigned]
   team manifest --state DIR
 
 Private state MUST stay outside Git worktrees. Never git pull into leader state.
@@ -31,7 +31,7 @@ export async function runTeam(args){
     for(let i=0;i<rest.length;i++){
       const key=rest[i],value=rest[++i];if(!key.startsWith('--')||value===undefined||value.startsWith('--'))problem('team/usage',help);
       if(['--state','--model','--repo-root','--project','--remote','--actor','--branch','--invite','--payload','--port','--interval'].includes(key))options[key.slice(2)]=value;
-      else if(['--mode','--target','--from','--to','--view','--expanded','--depth','--hops','--direction','--kinds','--detail','--cursor','--limit','--max-bytes','--page','--assignee','--status','--search'].includes(key))query[key==='--max-bytes'?'maxBytes':key.slice(2)]=value;
+      else if(['--mode','--target','--from','--to','--view','--expanded','--depth','--hops','--direction','--kinds','--detail','--cursor','--limit','--max-bytes','--page','--assignee','--status','--search','--filter'].includes(key))query[key==='--max-bytes'?'maxBytes':key.slice(2)]=value;
       else problem('team/usage','Unknown option '+key);
     }
     if(!options.state)problem('team/usage','--state is required');const directory=path.resolve(options.state);let result;
@@ -43,7 +43,7 @@ export async function runTeam(args){
       if(command==='invite'&&isLeader){const {projectId,epoch,leaderKey,remote,branch}=config;result={version:1,projectId,epoch,leaderKey,remote,branch};}
       else if(['query','manifest','state'].includes(command)&&isLeader){
         const response=await readAuthority({input,stateDir:path.join(directory,'graph')},command==='state'?'inspect':command,query);
-        result=command==='state'?{role:'leader',actor:config.actor,cursor:response.cursor,...response.collaboration}:response;
+        result=command==='state'?{role:'leader',actor:config.actor,cursor:response.cursor,...response.collaboration,connection:response.connection,...(response.warning?{warning:response.warning}:{})}:response;
       }else{
         try{team=isLeader?new TeamLeader(directory):new TeamMember(directory,{readOnly:['query','manifest','state'].includes(command)});}
         catch(error){
@@ -73,6 +73,9 @@ export async function runTeam(args){
         }
       }
     }
+    // Member reads open a verified disk replica, not the serving process. Null
+    // lastSync/syncFailure from this short-lived reader are not live diagnostics.
+    if(team?.config?.role==='member'&&['query','manifest','state'].includes(command))result={...result,connection:'local-accepted-snapshot',warning:'Verified local cache only; this command does not synchronize or report the running server connection.'};
     console.log(JSON.stringify(result,null,2));team?.close();
   }catch(error){team?.close();console.error(JSON.stringify({ok:false,code:error.code||'team/error',message:error.message,details:error.details},null,2));process.exitCode=1;}
 }

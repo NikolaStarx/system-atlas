@@ -20,3 +20,7 @@ body{height:100%;min-height:0!important;padding:0!important;overflow:hidden;back
 
 /* Leave the focus-mode exit, inspector and settings controls at top right. */
 html[data-atlas-focus=true] .toolbar{left:12px;right:auto}
+
+/* Display projection only; hidden graph objects remain in the accepted model. */
+[data-atlas-filter-hidden=true]{display:none!important}
+[data-atlas-filter-context=true]>.atlas-card-surface{stroke-dasharray:5 3}

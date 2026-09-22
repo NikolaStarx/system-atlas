@@ -59,6 +59,9 @@ maturity and bound evidence. Fetch source contents separately through registered
 evidence IDs. Graph queries do not copy whole source files into context.
 Board summary returns task ID, title, status, assignees, module IDs and blocker;
 full detail additionally includes description, acceptance and deliverables.
+Board and exact-view reads also support the shared `--filter` presets described
+in [filter projections](filter-projections.md). Presets select scope, not facts
+or permissions; the Human reader uses the same helpers.
 
 These are structural queries. Version cursors describe model/evidence history,
 not event time or runtime causality. Time-respecting execution queries are not
@@ -144,8 +147,12 @@ State lives beside the existing request journal in
 `.archify-design/<model-path-hash>/authority/` (or under `--state-dir`). Preserve
 it as project data; its local `.gitignore` excludes runtime state and session
 metadata from accidental commits. It contains checksummed sequential commits, compressed graph
-bundles, discovery metadata and preserved source backups. Writes use fsync and
-atomic rename; one live writer owns publication. A dead process's lock is
+bundles, discovery metadata and preserved source backups. Writes flush file data
+before atomic rename. On POSIX, the parent directory is then flushed as well;
+Windows skips directory fsync because Node cannot portably open directories for
+that operation. This avoids a Windows write failure but does not promise the
+same directory-metadata durability after power loss. Other write/fsync failures
+remain errors. One live writer owns publication. A dead process's lock is
 preserved under an abandoned name before another writer starts.
 
 Invalid/partial/missing source keeps the last accepted bundle, including after a
@@ -185,3 +192,10 @@ shell command or path-based file opener is introduced.
 and `--target` filters. Full reads and diffs include tasks. Human Board uses the
 same selector and accepted version. See [task board](task-board.md) for fields,
 local/leader writes, member field grants and conflict recovery.
+
+In team mode, member CLI reads report `connection: local-accepted-snapshot`:
+they read a locally verified replica, not the live `serve` process. A null
+`lastSync` or `syncFailure` in that process-local result is not proof of freshness.
+Use the existing sync service, or an explicit `team sync`, then reread the target
+when freshness matters. Leader `live` means the local authority is reachable;
+it does not mean every remote member has consumed its latest version.

@@ -3,7 +3,7 @@ name: system-atlas
 description: Design and explore systems through nested architecture views, source-backed module details, and separate design, implementation, test and runtime status. Use for system design, architecture exploration, task boards, interface explanation and scoped changes. Provides interactive HTML with trackpad navigation, docked or floating details, Archify visual styles and Frutiger Aero. Does not supervise a production workflow.
 license: MIT
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
   based_on: "Archify 2.16 (MIT); independent user-level fork"
 ---
 
@@ -66,6 +66,8 @@ body only selects; its info button opens details. Single-click the submap badge
 to expand a compact child map in place; double-click it to enter the full view.
 Keep submap badges in both density modes and provide explicit entry and keyboard
 alternatives. Selection and both detail modes use the same entity and draft. Refresh must preserve focus, selection, drafts and camera position.
+Keep established controls stationary across state changes; reserve space for
+conditional actions and changing labels, and test their geometry across states.
 
 The settings gear groups style, appearance, interface language and help. Use
 icon controls with tooltips and accessible names for common commands. UI language
@@ -91,6 +93,8 @@ Canvas and Board use the same accepted cursor, recovery and team authority.
 Start Agent task reads with `query --mode board`, filtered by member or module;
 use `task --payload` for local/leader edits and signed `task.set` for members.
 This adds planning and progress, without dispatch, leases or production gates.
+Board has independent scrolling columns and a local compact reading preference.
+For shared Board/Canvas filter presets, read [filter projections](references/filter-projections.md).
 
 ## Agent handoff
 
@@ -129,6 +133,8 @@ and drafts without presenting them as accepted changes. On conflict, reread the
 specific field and reconsider the intent before resubmitting; do not silently
 rebase. Member/session labels describe assignment, not exclusive ownership or
 live presence. This does not add worker dispatch or production supervision.
+Member CLI reads identify a verified local snapshot, not a live synchronization
+check. Confirm requests by matching their receipt ID, then reread the task.
 
 ## Individual diagrams
 

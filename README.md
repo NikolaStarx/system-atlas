@@ -79,6 +79,8 @@ the development dependencies installed by `npm ci`.
 - A task board over independent work items, optional many-to-many module links,
   scoped delete/restore, and signed member field grants. English/Chinese interface
   labels are independent of authored graph and task text.
+- Shared Board and Canvas filter presets, bounded Agent projections, compact
+  fixed-height Board cards, and resilient independent column scrolling.
 
 Topology equivalence is defined at the **same version and scope**, including
 expanded submaps. A filtered or folded view does not assert that omitted edges
@@ -132,6 +134,8 @@ controls, real-time presence or a high-volume message service.
 | Human projection and viewer | [design/deliver.mjs](design/deliver.mjs), [design/viewer.html](design/viewer.html) |
 | Interface and recovery integration tests | [test/agent-interface.test.mjs](test/agent-interface.test.mjs) |
 
+[0.5.1 verification record](references/verification-0.5.1.md) covers shared
+filters, board density, Windows write compatibility and team recovery fixes.
 [0.5.0 verification record](references/verification-0.5.0.md) lists task-board,
 Agent comprehension and browser checks, fixes and their limits. The earlier
 [0.4.0 record](references/verification-0.4.0.md) covers the collaboration baseline.

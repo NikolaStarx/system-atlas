@@ -1,6 +1,6 @@
 {
   "name": "system-atlas",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
   "description": "System design and layered architecture explorer, based on Archify 2.16.",
@@ -16,10 +16,11 @@
     "check:brand-marks": "node scripts/generate-brand-marks.mjs --check",
     "generate:validators": "node scripts/generate-validators.mjs",
     "check:validators": "node scripts/generate-validators.mjs --check",
-    "test": "node --test test/system-design.test.mjs test/v1-compatibility.test.mjs test/preview.test.mjs test/output-path.test.mjs test/delivery-contract.test.mjs test/nested-layout.test.mjs test/agent-interface.test.mjs test/team.test.mjs test/reader-ui.test.mjs test/task-board.test.mjs",
+    "test": "node --test test/system-design.test.mjs test/v1-compatibility.test.mjs test/preview.test.mjs test/output-path.test.mjs test/delivery-contract.test.mjs test/nested-layout.test.mjs test/agent-interface.test.mjs test/team.test.mjs test/reader-ui.test.mjs test/task-board.test.mjs test/atomic-write.test.mjs",
     "render:examples": "node scripts/render-examples.mjs examples",
     "test:system": "node --test test/system-design.test.mjs test/agent-interface.test.mjs test/team.test.mjs",
-    "test:team": "node --test test/team.test.mjs"
+    "test:team": "node --test test/team.test.mjs",
+    "test:browser": "node scripts/test-board-browser.mjs"
   },
   "devDependencies": {
     "ajv": "^8.17.1",

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createPublicKey } from 'node:crypto';
 import { GraphAuthority, atomicWrite } from '../design/authority.mjs';
 import { parseModel, problem } from '../design/model.mjs';
 import { buildDesign, explorerHTML } from '../design/deliver.mjs';
@@ -66,7 +66,7 @@ export class TeamMember {
     if(!id(requestId))problem('team/request','Invalid request ID');
     const existing=path.join(this.directory,'outbox',requestId+'.json');
     if(fs.existsSync(existing)){
-      const prior=readJSON(existing),p=verified(prior,readJSON(path.join(this.directory,'identity.json')).publicKey);
+      const prior=this.readOutboxRequest(requestId+'.json'),p=prior.payload;
       const retried=changes.map(c=>c.operation==='field.set'?{...c,expectedVersion:c.expectedVersion??p.changes.find(x=>x.nodeId===c.nodeId&&x.field===c.field)?.expectedVersion}:c);
       if(canonical(retried)!==canonical(p.changes)||canonical(context)!==canonical(p.context))problem('team/idempotency-conflict','Request ID already exists with another intent',{},409);
       return prior;
@@ -76,23 +76,42 @@ export class TeamMember {
     if(fs.existsSync(file)&&canonical(readJSON(file))!==canonical(envelope))problem('team/idempotency-conflict','Request ID already exists locally',{},409);
     atomicWrite(file,canonical(envelope));return envelope;
   }
+  readOutboxRequest(file){
+    if(!file.endsWith('.json')||!id(file.slice(0,-5)))problem('team/outbox-identity','Invalid outbox filename');
+    const target=path.join(this.directory,'outbox',file),stat=fs.lstatSync(target);
+    if(!stat.isFile())problem('team/outbox-file','Outbox entry must be a regular file');
+    if(stat.size>70000)problem('team/size','Outbox file exceeds protocol limit');
+    const envelope=readJSON(target,70000);
+    const key=createPublicKey(this.key).export({type:'spki',format:'pem'});
+    const request=validateRequest(verified(envelope,key));
+    if(request.actor!==this.config.actor||request.projectId!==this.config.projectId||request.epoch!==this.config.epoch||request.requestId!==file.slice(0,-5))problem('team/outbox-identity','Outbox request identity does not match this member and filename');
+    return envelope;
+  }
+  readOutbox(){
+    const directory=path.join(this.directory,'outbox'),requests=[],errors=[];
+    if(fs.existsSync(directory))for(const file of fs.readdirSync(directory).filter(n=>n.endsWith('.json')).sort()){
+      try{requests.push({file,envelope:this.readOutboxRequest(file)});}
+      catch(error){errors.push({file,code:error.code||'team/outbox-invalid',message:error instanceof SyntaxError?'Invalid JSON in retained outbox file':error.message});}
+    }
+    // Keep bad bytes in place for inspection; one entry cannot starve its neighbors.
+    return {requests,errors};
+  }
   async sync(){if(this.syncing)return this.syncing;this.syncing=this.syncOnce().finally(()=>{this.syncing=null;});return this.syncing;}
   async syncOnce(){
     this.writable();try{
       const head=await this.transport.fetch(),prefix='atlas/'+this.config.projectId+'/';
       const remote=await this.transport.read(head,prefix+'snapshot.json',32*1024*1024);if(!remote)problem('team/not-published','Leader has not published a snapshot');
       this.accept(JSON.parse(remote));
-      const outbox=path.join(this.directory,'outbox'),files={};
-      if(fs.existsSync(outbox))for(const file of fs.readdirSync(outbox).filter(n=>/^[a-zA-Z0-9_-]+\.json$/.test(n))){
-        const request=readJSON(path.join(outbox,file),70000);
+      const {requests,errors}=this.readOutbox(),files={};
+      for(const {file,envelope:request} of requests){
         if(!this.current.collaboration.receipts.some(r=>r.actor===this.config.actor&&r.requestId===request.payload.requestId&&r.payloadHash===hash(request.payload)))files[prefix+'requests/'+this.config.actor+'/'+file]=canonical(request);
       }
       if(Object.keys(files).length)await this.transport.publish(files,'Submit System Atlas change requests');
-      this.syncFailure=null;this.failure=null;this.lastSync=new Date().toISOString();return {ok:true,cursor:this.current.cursor,submitted:Object.keys(files).length};
+      this.syncFailure=null;this.failure=null;this.lastSync=new Date().toISOString();return {ok:!errors.length,partial:!!errors.length,cursor:this.current.cursor,submitted:Object.keys(files).length,outboxErrors:errors};
     }catch(error){this.syncFailure={code:error.code||'team/transport',message:error.message};this.failure=this.syncFailure;throw error;}
   }
   teamState(){
-    const outbox=path.join(this.directory,'outbox'),pending=fs.existsSync(outbox)?fs.readdirSync(outbox).filter(n=>n.endsWith('.json')).map(n=>readJSON(path.join(outbox,n))):[];
-    return {role:'member',actor:this.config.actor,cursor:this.current?.cursor||0,syncFailure:this.syncFailure,lastSync:this.lastSync||null,...(this.current?.collaboration||{}),outbox:pending.map(e=>({requestId:e.payload.requestId,changes:e.payload.changes,receipt:this.current?.collaboration.receipts.find(r=>r.actor===this.config.actor&&r.requestId===e.payload.requestId)||null}))};
+    const {requests,errors}=this.readOutbox();
+    return {role:'member',actor:this.config.actor,cursor:this.current?.cursor||0,syncFailure:this.syncFailure,lastSync:this.lastSync||null,...(this.current?.collaboration||{}),outboxErrors:errors,outbox:requests.map(({envelope:e})=>({requestId:e.payload.requestId,changes:e.payload.changes,receipt:this.current?.collaboration.receipts.find(r=>r.actor===this.config.actor&&r.requestId===e.payload.requestId&&r.payloadHash===hash(e.payload))||null}))};
   }
 }

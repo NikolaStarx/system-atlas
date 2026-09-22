@@ -31,6 +31,15 @@ ownership, live presence or proof that a session is running. Deliverables are
 human-authored references, not automatically verified evidence. Marking a task
 Done **never** upgrades any module's four maturity axes.
 
+For light team use, make one task per deliverable with a clear owner and checkable
+acceptance. Move it to `doing` when substantive work starts, add `blocked` only
+when others need to act, and move to `review` with deliverable references at the
+handoff. A reviewer can set `done` after inspecting the result. This is a team
+habit, not an enforced approval gate. Small working steps need no separate card
+or repeated status writes. When Atlas is unavailable, preserve the draft and
+operation ID and continue already authorized work; report synchronization at
+the next handoff without treating queued writes as accepted.
+
 The task board covers all task identities and module associations in the model.
 The shared `projectTasks` selector supplies both the Human board and Agent reads.
 The graph topology hash includes task IDs and associations when tasks exist;
@@ -47,6 +56,9 @@ arrow locates its module in Canvas (multiple links first open the link chooser).
 The board keeps filters when visiting Canvas. Search titles, descriptions and
 assignees, or filter by member. Drag a card to another status column, or use the
 Status selector in its details, which also works with keyboard and touch.
+Each column scrolls independently. Compact view preserves visible task anchors
+and drafts while showing fixed-height cards. [Shared filter presets](filter-projections.md)
+let Human and Agent readers select the same task or graph scope.
 
 The inspector header switches between docked and floating modes without replacing
 the form or losing its draft. Docking reserves board space (stacked on narrow
@@ -246,5 +258,13 @@ from the accepted card. Both Human and Agent replicas read signed accepted
 snapshots; Git transport has the existing synchronization delay and needs the
 leader online. See [collaboration](collaboration.md) for setup and recovery.
 
-Upgrade every participating System Atlas installation to 0.5 before sharing tasks.
+Grants bind stable task IDs. A stale field version is rejected after a task is
+deleted and recreated, but the old grant still applies to a new request for the
+reused ID. Use a fresh ID for an unrelated task; if an ID really must be reused,
+the leader must review or revoke the associated grants. A reported Agent/session
+label is descriptive metadata supplied by the requester, not verified identity
+or evidence of time worked. Historical receipt times record acceptance, not
+actual work duration or a continuous running session.
+
+Upgrade every participating System Atlas installation to 0.5.1 before sharing tasks.
 Old 0.4 validators intentionally reject the new collection instead of dropping it.

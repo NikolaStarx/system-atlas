@@ -27,6 +27,66 @@ function setup(){
 const change=(value,nodeId='parser',field='inputs')=>({operation:'field.set',nodeId,field,value});
 const node=f=>f.leader.authority.snapshot().model.entities.find(e=>e.id==='parser');
 
+test('team: malformed local outbox entries are retained and isolated from valid sync and HTTP reads',async()=>{
+  const f=setup();let server;
+  try{
+    await f.leader.sync();
+    const good=f.member.prepare([change(['surviving request'])],{},'valid-neighbor');
+    const outbox=path.join(f.memberDir,'outbox'),bad=new Map();
+    const put=(name,bytes)=>{bad.set(name,bytes);fs.writeFileSync(path.join(outbox,name),bytes);};
+    put('broken.json','{unfinished');put('shape.json',JSON.stringify({payload:null}));
+    put('signature.json',canonical({...good,signature:'invalid'}));
+    put('oversize.json','x'.repeat(70001));
+    put('request-shape.json',canonical(signed({...good.payload,requestId:'request-shape',changes:[]},f.member.key)));
+    put('wrong-actor.json',canonical(signed({...good.payload,requestId:'wrong-actor',actor:'bob'},f.member.key)));
+    put('wrong-epoch.json',canonical(signed({...good.payload,requestId:'wrong-epoch',epoch:'foreign'},f.member.key)));
+    put('wrong-project.json',canonical(signed({...good.payload,requestId:'wrong-project',projectId:'foreign'},f.member.key)));
+    put('wrong-filename.json',canonical(good));put('bad name.json',canonical(good));
+    assert.throws(()=>f.member.prepare([change(['do not overwrite'])],{},'broken'));
+    const before=f.member.teamState();assert.equal(before.outbox.length,1);assert.equal(before.outboxErrors.length,bad.size);
+    const result=await f.member.sync();assert.equal(result.ok,false);assert.equal(result.partial,true);assert.equal(result.submitted,1);assert.equal(result.outboxErrors.length,bad.size);
+    const head=await f.member.transport.fetch(),remotePath='atlas/test-project/requests/alice/';
+    assert.ok(await f.member.transport.read(head,remotePath+'valid-neighbor.json',70000));
+    for(const name of bad.keys())assert.equal(await f.member.transport.read(head,remotePath+name,70000),null);
+    await f.leader.sync();await f.member.sync();
+    assert.equal(f.member.teamState().outbox[0].receipt.status,'accepted');assert.deepEqual(node(f).inputs,['surviving request']);
+    for(const [name,bytes] of bad)assert.equal(fs.readFileSync(path.join(outbox,name),'utf8'),bytes);
+    server=await startDesignPreview({input:f.member.options.input,team:f.member});
+    const response=await fetch(server.url+'api/team');assert.equal(response.status,200);
+    const state=await response.json();assert.equal(state.outboxErrors.length,bad.size);assert.equal(state.outbox[0].receipt.status,'accepted');
+    const q=await fetch(server.url+'api/query?mode=overview');assert.equal(q.status,200);
+    // Explicit local repair resumes that ID; other bad entries remain isolated.
+    const repaired=signed({...good.payload,requestId:'broken',changes:[{operation:'comment.add',nodeId:'parser',text:'Repaired local request'}]},f.member.key);
+    fs.writeFileSync(path.join(outbox,'broken.json'),canonical(repaired));
+    assert.equal((await f.member.sync()).submitted,1);await f.leader.sync();await f.member.sync();
+    assert.equal(f.member.teamState().outbox.find(r=>r.requestId==='broken').receipt.status,'accepted');
+    assert.equal(f.member.teamState().outboxErrors.length,bad.size-1);
+    for(const name of bad.keys())if(name!=='broken.json')fs.unlinkSync(path.join(outbox,name));
+    const recovered=await f.member.sync();assert.equal(recovered.ok,true);assert.deepEqual(recovered.outboxErrors,[]);
+  }finally{await server?.stop();f.close();fs.rmSync(f.root,{recursive:true,force:true});}
+});
+
+test('team: damaged durable leader history cannot sign or republish an older verified prefix',async()=>{
+  const f=setup();let damaged,repaired;
+  try{
+    f.leader.apply(f.member.prepare([change(['latest published'])]));await f.leader.sync();
+    const cursor=f.leader.authority.record().cursor;
+    const commit=path.join(f.leader.authority.directory,'commits',String(cursor).padStart(12,'0')+'.json');
+    const original=fs.readFileSync(commit);f.leader.close();fs.writeFileSync(commit,'{corrupt');
+    damaged=new TeamLeader(f.leaderDir);assert.ok(damaged.authority.storeFailure);
+    assert.equal(damaged.authority.record().cursor,cursor-1);
+    assert.throws(()=>damaged.publication(),e=>e.code==='authority/store-damaged');
+    await assert.rejects(damaged.sync(),e=>e.code==='authority/store-damaged');
+    const head=await f.member.transport.fetch();
+    const remote=JSON.parse(await f.member.transport.read(head,'atlas/test-project/snapshot.json',32*1024*1024));
+    assert.equal(remote.payload.cursor,cursor);assert.equal(fs.readFileSync(commit,'utf8'),'{corrupt');
+    damaged.close();damaged=null;fs.writeFileSync(commit,original);
+    repaired=new TeamLeader(f.leaderDir);assert.equal(repaired.authority.storeFailure,null);
+    assert.equal(repaired.authority.record().cursor,cursor);
+    assert.equal((await repaired.sync()).cursor,cursor);
+  }finally{damaged?.close();repaired?.close();f.close();fs.rmSync(f.root,{recursive:true,force:true});}
+});
+
 test('team: private authority cannot be initialized inside a Git worktree',()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'atlas-team-location-'));execFileSync('git',['init','--quiet',root]);const f=fixture(root);
   assert.throws(()=>initLeader({directory:path.join(root,'state'),input:f.input,projectId:'project',remote:root}),e=>e.code==='team/state-location');

@@ -106,6 +106,9 @@ export class TeamLeader {
     return receipt;
   }
   publication(){
+    // A verified prefix remains readable, but must never be signed as the new
+    // authoritative tip while later durable history is damaged.
+    this.authority.writable();
     const snapshot=this.authority.snapshot(),object=this.authority.loadObject(this.authority.record().object);
     return signed({version:1,projectId:this.config.projectId,epoch:this.config.epoch,cursor:snapshot.cursor,source:object.source,snapshot},this.key);
   }
@@ -115,6 +118,7 @@ export class TeamLeader {
   }
   async syncOnce(){
     try{
+      this.authority.writable();
       this.recover();this.authority.refresh();const head=await this.transport.fetch(),prefix='atlas/'+this.config.projectId+'/',outcomes=[];
       const remote=await this.transport.read(head,prefix+'snapshot.json',32*1024*1024).catch(e=>'Unreadable remote snapshot: '+e.message);
       // Preserve unexpected published bytes for inspection. Never import them.

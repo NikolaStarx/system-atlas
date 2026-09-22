@@ -18,10 +18,13 @@ export function installAtlasTeam({ $, esc, snapshot, token, poll, renderDetails,
     if(!state)return;
     $('team-heading').textContent=(role==='leader'?t('队长 · '):t('队员 · '))+state.actor;
     $('team-sync-status').textContent=(state.syncFailure?t('同步失败，保留已确认版本 · ')+state.syncFailure.message:state.lastSync?t('最近同步 ')+new Date(state.lastSync).toLocaleTimeString():t('尚未完成远端同步'))+t(' · 本机 #')+state.cursor;
-    $('team-sync-status').classList.toggle('team-warning',!!state.syncFailure);
-    $('team-open').textContent=state.syncFailure?t('协作 · 待同步'):t('协作');
+    const outboxErrors=state.outboxErrors||[];
+    if(outboxErrors.length)$('team-sync-status').textContent+=t(' · 请求文件待修复：')+outboxErrors.length;
+    $('team-sync-status').classList.toggle('team-warning',!!state.syncFailure||!!outboxErrors.length);
+    $('team-open').textContent=state.syncFailure||outboxErrors.length?t('协作 · 待同步'):t('协作');
     $('team-policy').innerHTML=state.members.map(m=>'<li><b>'+esc(m.actor)+'</b>'+m.grants.map(g=>' · '+esc(g.nodes.join(', '))+'：'+esc(g.fields.map(f=>names[f]).join('、')||t('无字段编辑'))+(g.comments?t('，可批注'):'')+(g.onlyIfEmpty?t('，仅限空字段'):'')).join('')+(m.taskGrants||[]).map(g=>' · '+t('任务')+': '+esc(g.tasks.join(', '))+' / '+esc(g.fields.map(f=>names[f]).join(', '))).join('')+(m.grants.length||m.taskGrants?.length?'':t(' · 已撤销写入权限'))+'</li>').join('')||t('<li>尚未授权成员</li>');
     $('team-receipts').innerHTML=(role==='member'?state.outbox.slice(-20).reverse().map(q=>q.receipt?receiptHTML(q.receipt):t('<article class="request"><strong>已排队 · 等待队长</strong><small>')+esc(q.requestId)+'</small><p>'+esc(q.changes.map(c=>(c.taskId||c.nodeId)+' / '+(names[c.field]||names.comment)).join('，'))+'</p></article>'):state.receipts.slice(-20).reverse().map(receiptHTML)).join('')||t('<p class="empty">暂无请求</p>');
+    $('team-receipts').innerHTML=outboxErrors.map(e=>'<article class="request team-warning"><strong>'+esc(t('请求未上传，原文件保留'))+'</strong><small>'+esc(e.file)+'</small><p>'+esc(e.code)+' · '+esc(e.message)+'</p></article>').join('')+$('team-receipts').innerHTML;
     $('team-form').hidden=role!=='member';$('team-leader-note').hidden=role!=='leader';
     const receipt=request&&state.receipts.find(r=>r.actor===state.actor&&r.requestId===request.requestId);
     if(receipt)$('team-message').textContent=receipt.status==='accepted'?t('这个请求已生效。草稿保留；继续修改前，请重新载入已确认内容。'):t('这个请求已拒绝：')+receipt.message+t('。请核对权限和当前内容后再提交新请求。');

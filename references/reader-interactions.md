@@ -99,3 +99,11 @@ geometry must not move when canvas-only tools disappear. See [task board](task-b
 for card hit regions, theme colors, keyboard status editing, draft recovery and
 module navigation. Dragging captures the starting accepted version; refresh may
 not silently rebase a drop onto another user's update.
+
+The Board toolbar reserves width for the filter label, clear control, search,
+member selector and count. State changes, translations and empty results must
+not shift these operation areas; test their rectangles at relevant viewport
+widths, not just page overflow. Long card content may be clamped for scanning,
+while its full value stays in details. Compact density keeps independent column
+scroll anchors and unsaved drafts. [Shared filter projections](filter-projections.md)
+define the exact Agent-equivalent selection semantics.

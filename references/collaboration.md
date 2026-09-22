@@ -88,12 +88,13 @@ node bin/system-atlas.mjs team serve --state "$ATLAS_MEMBER_STATE" --interval 10
 
 ## 精细权限与请求格式
 
-第一版只实现最常用的两个动作：
+队员目前可提交下列限定操作：
 
 | 动作 | 权限与行为 |
 |---|---|
 | `field.set` | 显式节点 ID + 白名单字段 + 读取时的字段版本；替换这一个字段 |
 | `comment.add` | 显式节点的批注权限；追加一条有成员与会话来源的批注 |
+| `task.set` | 显式任务 ID + `taskGrants` 白名单字段 + 读取时的字段版本；替换这一个任务字段。见[任务板协议](task-board.md)。 |
 
 可授权字段为 `label`、`purpose`、`inputs`、`outputs`、`steps`、`openIssues`。
 没有任意 JSON Pointer、执行脚本、节点删除、拓扑修改、权限修改、证据或成熟度修改
@@ -102,7 +103,9 @@ node bin/system-atlas.mjs team serve --state "$ATLAS_MEMBER_STATE" --interval 10
 - `fields: []` + `comments: true`：只可批注。
 - `onlyIfEmpty: true`：只可填写真正为空字符串或空数组的字段，不能覆盖已有内容。
   “待定”这样的占位文字不是空；需要队长明确调整。
-- 对某个 actor 重新 `team grant` 会替换其授权；`grants: []` 撤销写入权限。
+- 对某个 actor 重新 `team grant` 会替换其授权；`grants: []` 只撤销模块写入权限。
+  任务字段另由 `taskGrants` 授权。要撤销全部写入权限，显式同时设
+  `grants: []` 和 `taskGrants: []`，并检查生效后的策略。
   已排队请求按**执行当时**的策略校验。
 - 队长仍可本机增删节点、连线、视图，修改字段和授权，但设计必须通过模型及渲染校验。
 - `agentId` / `sessionId` 是分工和来源标签，不是在线状态、独占锁或额外身份凭证。
@@ -191,6 +194,21 @@ POST 需同源 Origin、JSON 和 `/api/session` 的会话 token；只监听 loop
 成员缓存只含同步到过的 cursor；缺失版本明确返回 `authority/reset-required`，
 Agent 应重读 manifest，不自行拼接不同版本的数据。
 
+成员 CLI 的 `connection: local-accepted-snapshot` 表示本地已验签缓存，不能
+据此认定 `serve` 在线或已同步最新远端版本；`lastSync: null` / `syncFailure: null`
+也不是同步成功证明。需要新版本时使用已有服务同步，或显式 `team sync` 后再读。
+队长的 `live` 仅证明本机权威端可达，不证明所有队员已经回读。
+
+`team request` 成功是本地签名并排队，`sync.submitted` 是上传数量；两者都不是
+队长接受。按 requestId 查 outbox 中的 receipt，只有 `receipt: null` 才待确认。
+accepted 后回读目标；conflict 重读字段并以新 ID 提交重新决定的意图；forbidden
+停止该写入，不绕过授权。结果未知保留原 ID/载荷，不忙等或反复制造新请求。
+损坏、超限或身份不匹配的本地请求原文件保留，`outboxErrors` 逐项列明；有效
+请求仍可上传。`sync.ok: false, partial: true` 表示存在需人工修复的本地请求，
+即使 `submitted` 大于零也不能把整批当作完成。修复原文件后按原 ID 重试。
+收尾先停止新请求，收回执或明确保留 pending，再撤权并同步、停止成员服务，
+最后停止队长服务。保留私有目录与历史；只停止本次拥有的进程。
+
 ## 出错与恢复
 
 - 非法请求：签名、身份、格式或路径错误进入隔离记录；合法签名但越权、冲突或模型
@@ -203,6 +221,8 @@ Agent 应重读 manifest，不自行拼接不同版本的数据。
   在重启时完成镜像写入，不重复执行请求。出现额外本机编辑时停止恢复以保留它。
 - 队员某份缓存损坏：保留损坏文件用于检查，尝试此前有效签名快照；下次成功同步可修复。
   队长持久历史损坏则遵循原有 fail-closed 机制，不能随意删掉记录继续写。
+- 队员某份 outbox 请求损坏：保留原文件与错误诊断，不发送它、不遮蔽其他有效请求；
+  同一 ID 的损坏文件不能被新请求覆盖。核实原意后显式修复，再等待回执。
 - 队长电脑损坏：需要恢复**整个私有目录备份**，包括私钥、历史和源文件。
   GitHub 的发布副本不是自动权威恢复源。丢失密钥/完整历史时，应明确建立新 epoch，
   重新分发可信邀请与授权，不能冒充原权威悄悄续写。

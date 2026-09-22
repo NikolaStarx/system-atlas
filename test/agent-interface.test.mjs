@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { fixture } from './helpers/system-fixture.mjs';
 import { modelSnapshot, loadModel, digest } from '../design/model.mjs';
@@ -15,7 +16,7 @@ const values=(r,type)=>r.records.filter(r=>r.type===type).map(r=>r.value);
 const ids=(r,type)=>values(r,type).map(v=>v.id).sort();
 const get=async(s,route)=>{const r=await fetch(s.url+route);return {status:r.status,body:await r.json()};};
 const write=f=>fs.writeFileSync(f.input,JSON.stringify(f.model));
-const cli=(...args)=>new Promise((resolve,reject)=>{const p=spawn(process.execPath,[new URL('../bin/system-atlas.mjs',import.meta.url).pathname,...args]);let out='',err='';p.stdout.on('data',x=>out+=x);p.stderr.on('data',x=>err+=x);p.on('error',reject);p.on('close',code=>code?reject(Error(err)):resolve(JSON.parse(out)));});
+const cli=(...args)=>new Promise((resolve,reject)=>{const p=spawn(process.execPath,[fileURLToPath(new URL('../bin/system-atlas.mjs',import.meta.url)),...args]);let out='',err='';p.stdout.on('data',x=>out+=x);p.stderr.on('data',x=>err+=x);p.on('error',reject);p.on('close',code=>code?reject(Error(err)):resolve(JSON.parse(out)));});
 
 test('queries: local boundaries, explicit containment depth, reach and path keep different semantics',()=>{
   const f=fixture(),s=snapshot(f);

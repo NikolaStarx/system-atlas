@@ -43,7 +43,7 @@ See references/system-design-contract.md for payloads and evidence contracts.`;
       const key = rest[i];
       if (key === '--json' || key === '--no-open') continue;
       if (key === '--offline') { options.offline = true; continue; }
-      if (['--mode','--target','--from','--to','--view','--expanded','--depth','--hops','--direction','--kinds','--detail','--cursor','--limit','--max-bytes','--page','--after','--url','--assignee','--status','--search'].includes(key)) {
+      if (['--mode','--target','--from','--to','--view','--expanded','--depth','--hops','--direction','--kinds','--detail','--cursor','--limit','--max-bytes','--page','--after','--url','--assignee','--status','--search','--filter'].includes(key)) {
         const value=rest[++i]; if(!value||value.startsWith('--'))problem('design/usage', `${key} needs a value`);
         if(key==='--url')options.url=value;else query[key==='--max-bytes'?'maxBytes':key.slice(2)]=value;continue;
       }

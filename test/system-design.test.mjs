@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import vm from 'node:vm';
 import { validateModel, loadModel, modelSnapshot, compileView, digest, evaluateBinding } from '../design/model.mjs';
@@ -50,7 +51,7 @@ test('requests: independent processes serialize one duplicate operation; stale d
  const f=fixture();const payload={action:'create',operationId:'duplicate',id:'request-2',entityId:'parser',baseRevision:f.revision,text:'One request'};
  const payloadFile=path.join(f.root,'request.json');fs.writeFileSync(payloadFile,JSON.stringify(payload));
  const cli=new URL('../bin/archify.mjs',import.meta.url);
- const run=()=>new Promise((resolve,reject)=>{const child=spawn(process.execPath,[cli.pathname,'design','submit',f.input,'--payload',payloadFile]);let out='',err='';child.stdout.on('data',x=>out+=x);child.stderr.on('data',x=>err+=x);child.on('error',reject);child.on('close',code=>code?reject(Error(err)):resolve(JSON.parse(out)));});
+ const run=()=>new Promise((resolve,reject)=>{const child=spawn(process.execPath,[fileURLToPath(cli),'design','submit',f.input,'--payload',payloadFile]);let out='',err='';child.stdout.on('data',x=>out+=x);child.stderr.on('data',x=>err+=x);child.on('error',reject);child.on('close',code=>code?reject(Error(err)):resolve(JSON.parse(out)));});
  const results=await Promise.all([run(),run()]);assert.equal(results.filter(r=>!r.replayed).length,1);assert.equal(readRequests(f.options).length,1);
  f.model.meta.title='New design';fs.writeFileSync(f.input,JSON.stringify(f.model));await assert.rejects(mutateRequest(f.options,{...payload,id:'new',operationId:'new'}),e=>e.code==='request/revision-conflict');
  assert.equal(readRequests(f.options).length,1);

@@ -1,3 +1,4 @@
+import { matchesTaskFilter } from './filters.mjs';
 import { parseModel, digest, problem } from './model.mjs';
 
 export const taskFields = ['title', 'description', 'status', 'assignees', 'entities', 'acceptance', 'deliverables', 'blocked'];
@@ -6,6 +7,7 @@ export const taskFields = ['title', 'description', 'status', 'assignees', 'entit
 // are explicit associations, never dataflow, containment or evidence of maturity.
 export function projectTasks(model, query = {}) {
   const tasks = (model.tasks || []).filter(task =>
+    matchesTaskFilter(task, query.filter) &&
     (!query.target || task.id === query.target || task.entities.includes(query.target)) &&
     (!query.assignee || (query.assignee === '__unassigned__' ? !task.assignees.length : task.assignees.includes(query.assignee))) &&
     (!query.status || task.status === query.status) &&

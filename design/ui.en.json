@@ -191,6 +191,8 @@
   "同步失败，保留已确认版本 · ": "Sync failed; accepted revision retained · ",
   "最近同步 ": "Last synced ",
   "尚未完成远端同步": "No remote sync yet",
+  " · 请求文件待修复：": " · Request files need repair: ",
+  "请求未上传，原文件保留": "Request not uploaded; original file retained",
   " · 本机 #": " · Local #",
   "协作 · 待同步": "Team · sync pending",
   "无字段编辑": "No field editing",

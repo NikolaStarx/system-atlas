@@ -55,7 +55,15 @@ test('tasks: leader CLI uses its private authority and team board filters work f
   for(const dir of [directory,memberDir]){
    const q=await cli('team','query','--state',dir,'--mode','board','--assignee','alice','--status','review','--search','口径');
    assert.deepEqual(q.records.map(r=>r.value.id),['first']);
+   assert.equal(q.connection,dir===directory?'live':'local-accepted-snapshot');
   }
+   assert.equal((await cli('team','state','--state',directory)).connection,'live');
+  const cached=await cli('team','state','--state',memberDir);
+  assert.equal(cached.connection,'local-accepted-snapshot');assert.match(cached.warning,/does not synchronize/);
+  assert.equal((await cli('team','manifest','--state',memberDir)).connection,'local-accepted-snapshot');
+  await server.stop();server=null;
+  const offline=await cli('team','state','--state',directory);
+  assert.equal(offline.connection,'offline-accepted-snapshot');assert.ok(offline.warning);
  }finally{if(server)await server.stop();leader.close();member.close();}
 });
 
@@ -180,4 +188,21 @@ test('tasks: signed member fields, atomic rejection, stale fields, revocation an
   }finally{await preview.stop();}
 
  }finally{leader.close();member.close();}
+});
+
+test('filters: bounded shared presets preserve authority, boundaries, pagination and explicit target scope',()=>{
+ const f=setup();f.model.tasks[0].blocked='waiting';f.model.tasks[0].entities=['decode'];f.model.tasks[1].assignees=[];
+ const s=snapshot(f),before=JSON.stringify(s);
+ for(const [filter,ids] of [['all',['first','second']],['active',['first','second']],['blocked',['first']],['review',[]],['unassigned',['second']]])assert.deepEqual(queryGraph(s,{mode:'board',filter}).records.map(r=>r.value.id),ids);
+ assert.equal(queryGraph(s,{mode:'board',filter:'blocked',assignee:'bob'}).records.length,0);
+ const page=queryGraph(s,{mode:'board',filter:'active',limit:1});assert.equal(page.page.hasMore,true);
+ assert.throws(()=>queryGraph(s,{mode:'board',filter:'all',limit:1,page:page.page.next}),e=>e.code==='query/page');
+ const q=queryGraph(s,{mode:'view',view:'overview',expanded:'parser,parser/asr',filter:'blocked'});
+ assert.deepEqual(q.records.filter(r=>r.type==='entity').map(r=>r.value.id),['asr','decode','parser']);assert.equal(q.filter.context,2);assert.equal(q.filter.matched,1);
+ assert.ok(q.records.some(r=>r.type==='boundary'&&r.value.id==='decode-emit'));
+ const ids=filter=>queryGraph(s,{mode:'view',view:'overview',filter,target:'parser'}).records.filter(r=>r.type==='entity').map(r=>r.value.id);
+ assert.deepEqual(ids('upstream'),['input','parser']);assert.deepEqual(ids('downstream'),['parser','session']);assert.deepEqual(ids('neighbors'),['input','parser','session']);
+ assert.throws(()=>queryGraph(s,{mode:'view',view:'overview',filter:'neighbors'}),e=>e.code==='query/argument');
+ for(const query of [{mode:'board',filter:''},{mode:'board',filter:'typo'},{mode:'view',view:'overview',filter:'active'},{mode:'full',filter:'blocked'}])assert.throws(()=>queryGraph(s,query),e=>e.code==='query/argument');
+ assert.equal(JSON.stringify(s),before);
 });

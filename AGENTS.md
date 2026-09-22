@@ -14,6 +14,11 @@
   AGENTS instructions complement the enforced protocol; they are not security.
 - UI changes retain themes, separate selection/inspection/expansion/navigation,
   and preserve drafts/camera through updates. Verify actual browser interactions.
+- State changes must not shift established operation areas. Reserve space for
+  conditional controls, counts and changing labels; compare control geometry
+  across default, filtered, empty, disabled and longest-label states in both UI
+  languages and relevant viewport widths. A static screenshot or no overflow
+  does not establish layout stability.
 - Run `npm test`; team-only work can first use `npm run test:team`. Tests use
   disposable temporary fixtures and local bare Git remotes, never real user state.
 - Runtime tests, browser checks and actual multi-machine/GitHub acceptance are

@@ -1,3 +1,4 @@
+import { atlasFilterPresets, filterGraphEntities } from './filters.mjs';
 import { digest, problem } from './model.mjs';
 import { projectTasks } from './tasks.mjs';
 
@@ -27,7 +28,7 @@ export function manifest(snapshot) {
   return {schema_version:1, cursor:snapshot.cursor, revision:snapshot.revision, evidenceRevision:snapshot.evidenceRevision, topologyHash:topologyHash(m), title:m.meta.title,
     counts:Object.fromEntries(['entities','relations','views','evidence','tasks'].map(k=>[k,(m[k]||[]).length])),
     views:m.views.map(v=>({id:v.id,title:v.title,scope:v.scope||null,entities:v.placements.length,relations:v.relations.length})),
-    capabilities:{strategies, diff:true, resumableEvents:true, pinnedVersions:true, runtimeTemporalQueries:false, taskBoard:true},
+    capabilities:{strategies, diff:true, resumableEvents:true, pinnedVersions:true, runtimeTemporalQueries:false, taskBoard:true, filters:{board:atlasFilterPresets('board'),view:atlasFilterPresets('canvas')}},
     defaults:{mode:'overview',detail:'summary',limit:100,maxBytes:65536},
     semantics:{direction:'Stored from → to; dependency impact depends on the authored edge convention.',time:'Cursor is an accepted model/evidence revision, not a runtime event clock.',crossLevel:'Containment never implies dataflow; missing boundary links remain unknown.'}};
 }
@@ -37,17 +38,18 @@ function int(value, fallback, max, name) {
   return n;
 }
 export function normalizeQuery(q={}) {
-  const allowed=['mode','target','from','to','view','expanded','depth','hops','direction','kinds','detail','limit','maxBytes','page','cursor','assignee','status','search'];
+  const allowed=['mode','target','from','to','view','expanded','depth','hops','direction','kinds','detail','limit','maxBytes','page','cursor','assignee','status','search','filter'];
   for(const k of Object.keys(q)) if(!allowed.includes(k)) problem('query/argument','Unknown query option',{key:k});
   const mode=q.mode||'overview', detail=q.detail||'summary', direction=q.direction||'out';
   if(!strategies.includes(mode)||!['summary','full'].includes(detail)||!['in','out','both'].includes(direction)) problem('query/argument','Invalid mode, detail or direction');
   const kinds=q.kinds===undefined?['call','dataflow','dependency','feedback']:(Array.isArray(q.kinds)?q.kinds:String(q.kinds).split(','));
   if(!kinds.length||kinds.some(k=>!['call','dataflow','dependency','feedback'].includes(k))) problem('query/argument','Invalid relation kinds');
   const query={mode,detail,direction,kinds:[...new Set(kinds)].sort(),depth:int(q.depth,0,1000,'depth'),hops:int(q.hops,1,1000,'hops'),limit:Math.max(1,int(q.limit,100,10000,'limit')),maxBytes:Math.max(1024,int(q.maxBytes,65536,16*1024*1024,'maxBytes'))};
-  for(const k of ['target','from','to','view','assignee','status','search']) if(q[k]!==undefined){if(typeof q[k]!=='string')problem('query/argument',`${k} must be a string`);query[k]=q[k];}
+  for(const k of ['target','from','to','view','assignee','status','search','filter']) if(q[k]!==undefined){if(typeof q[k]!=='string')problem('query/argument',`${k} must be a string`);query[k]=q[k];}
   if(q.expanded!==undefined){const keys=Array.isArray(q.expanded)?q.expanded:String(q.expanded).split(',').filter(Boolean);if(mode!=='view'||keys.some(k=>typeof k!=='string'||k.length>8000))problem('query/argument','expanded requires view mode and valid instance paths');query.expanded=[...new Set(keys)].sort();}
   if(query.status && !['todo','doing','review','done'].includes(query.status)) problem('query/argument','Invalid task status');
   if(mode!=='board' && ['assignee','status','search'].some(k=>q[k]!==undefined)) problem('query/argument','Task filters require board mode');
+  if(query.filter!==undefined && (!['board','view'].includes(mode)||!atlasFilterPresets(mode==='board'?'board':'canvas').some(([id])=>id===query.filter)))problem('query/argument','Invalid filter for query mode');
   return query;
 }
 // Pages are pinned to both a snapshot and a normalized query, never live offsets.
@@ -115,6 +117,13 @@ export function queryGraph(snapshot, input={}) {
     if(q.target)requireNode(q.target);
     selectedEdges=edges.filter(e=>groups.some(g=>g.members.includes(e.from)&&g.members.includes(e.to)));notes.push('Cyclic strongly connected regions; not an enumeration of cycles or proof of a business feedback loop.');
   }
+  let filterSummary;
+  if(q.mode==='view'&&q.filter){
+    let f;try{f=filterGraphEntities({...m,relations:edges},[...ids],q.filter,q.target);}catch(e){problem('query/argument',e.message);}
+    ids=new Set(f.ids);selectedEdges=selectedEdges.filter(e=>ids.has(e.from)&&ids.has(e.to));
+    filterSummary={strategy:q.filter,target:q.target||null,matched:f.matchedIds.length,context:f.contextIds.length,hidden:f.hiddenCount,matchingOutsideView:f.matchingOutsideView};
+    notes.push('Filtered view: hidden records still exist. Containment ancestors may remain as context. Edges follow stored arrows, not runtime causality.');
+  }
   selectedEdges??=edges.filter(e=>ids.has(e.from)&&ids.has(e.to));
   const boundary=q.mode==='overview'?[]:edges.filter(e=>ids.has(e.from)!==ids.has(e.to)).map(e=>({...e,externalEntity:ids.has(e.from)?e.to:e.from}));
   const node=e=>q.detail==='full'?e:{id:e.id,label:e.label,type:e.type,...(e.parent?{parent:e.parent}:{}),children:(children.get(e.id)||[]).length,submap:m.views.find(v=>v.scope===e.id)?.id||null,...(e.aggregation?{aggregation:e.aggregation}:{})};
@@ -123,7 +132,7 @@ export function queryGraph(snapshot, input={}) {
   const records=[...entities.map(value=>({type:'entity',value})),...sorted(selectedEdges).map(value=>({type:'relation',value})),...sorted(boundary).map(value=>({type:'boundary',value})),...sorted(groups).map(value=>({type:'group',value})),...sorted(m.evidence.filter(e=>evidenceIds.has(e.id))).map(value=>({type:'evidence',value}))];
   if(q.mode==='full') records.push(...projectTasks(m).tasks.map(value=>({type:'task',value})));
   const result=paginate(records,{cursor:snapshot.cursor,revision:snapshot.revision,evidenceRevision:snapshot.evidenceRevision,query:q}, {...q,page:input.page});
-  return {schema_version:1,cursor:snapshot.cursor,revision:snapshot.revision,evidenceRevision:snapshot.evidenceRevision,query:q,selectionComplete:true,notes,...(path?{path}:{}),...result};
+  return {schema_version:1,cursor:snapshot.cursor,revision:snapshot.revision,evidenceRevision:snapshot.evidenceRevision,query:q,selectionComplete:true,notes,...(filterSummary?{filter:filterSummary}:{}),...(path?{path}:{}),...result};
 }
 export function diffSnapshots(before,after,options={}) {
   const changes=[];
